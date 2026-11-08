@@ -1,0 +1,22 @@
+# Python (Thư mục ảo & cache)
+__pycache__/
+*.pyc
+env/
+venv/
+.env
+
+# Node.js (Nếu có dùng backend/frontend js)
+node_modules/
+.npm
+package-lock.json
+
+# Hệ điều hành & IDEs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Database (Không push file backup hay file db vật lý lên git)
+*.mdf
+*.ldf
+*.sql.bak
