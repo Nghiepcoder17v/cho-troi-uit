@@ -1,14 +1,17 @@
-# Python (Thư mục ảo & cache)
+# Python (thư mục ảo & cache)
 __pycache__/
 *.pyc
 env/
 venv/
+.venv/
+.pytest_cache/
+
+# Bí mật & cấu hình cục bộ (KHÔNG commit). .env.example thì được commit.
 .env
 
-# Node.js (Nếu có dùng backend/frontend js)
+# Node.js (nếu có dùng frontend JS). Nên COMMIT package-lock.json để mọi người cài cùng phiên bản.
 node_modules/
 .npm
-package-lock.json
 
 # Hệ điều hành & IDEs
 .DS_Store
@@ -16,7 +19,12 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Database (Không push file backup hay file db vật lý lên git)
+# Database (không push file backup hay file db vật lý lên git)
 *.mdf
 *.ldf
 *.sql.bak
+*.db
+*.sqlite3
+
+# Dữ liệu sinh ra / xuất ra từ pipeline
+data_pipeline/output/
