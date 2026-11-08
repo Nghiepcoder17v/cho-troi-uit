@@ -1,56 +1,96 @@
-# backend/models.py
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric
+"""ORM models - phản chiếu đúng schema trong database_scripts/01_init_schema.sql.
+
+Nguồn sự thật của schema là file SQL (đã có index, trigger, filtered unique index).
+Backend KHÔNG tự tạo bảng; các CheckConstraint bên dưới chỉ để model khớp với DB
+và để unit test (SQLite) kiểm tra được ràng buộc.
+"""
+from datetime import datetime, timezone
+
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Unicode,
+    UnicodeText,
+)
 from sqlalchemy.orm import relationship
-from datetime import datetime
+
 from database import Base
 
-class User(Base):
-    __tablename__ = "users"
 
-    user_id = Column(Integer, primary_key=True, autoincrement=True)
-    student_id = Column(String(10), unique=True, nullable=False)
-    email = Column(String(100), unique=True, nullable=False)
-    full_name = Column(String(100), nullable=False)
-    major = Column(String(50))
-    created_at = Column(DateTime, default=datetime.utcnow)
+def utcnow() -> datetime:
+    """Giờ UTC, không kèm tzinfo (khớp DATETIME2 + SYSUTCDATETIME() trong SQL)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+
 
 class Category(Base):
     __tablename__ = "categories"
 
     category_id = Column(Integer, primary_key=True, autoincrement=True)
-    category_name = Column(String(50), unique=True, nullable=False)
+    category_name = Column(Unicode(50), unique=True, nullable=False)
+
+
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint("email LIKE '%@gm.uit.edu.vn'", name="CHK_User_Email"),
+    )
+
+    user_id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(String(10), unique=True, nullable=False)
+    email = Column(String(100), unique=True, nullable=False)
+    password_hash = Column(String(100), nullable=False)
+    full_name = Column(Unicode(100), nullable=False)
+    major = Column(Unicode(50))
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
 
 class Product(Base):
     __tablename__ = "products"
+    __table_args__ = (
+        CheckConstraint("price >= 0", name="CHK_Product_Price"),
+        CheckConstraint(
+            "condition IN ('Brand New', 'Like New', 'Good', 'Fair')", name="CHK_Product_Condition"
+        ),
+        CheckConstraint("status IN ('Available', 'Sold', 'Hidden')", name="CHK_Product_Status"),
+    )
 
     product_id = Column(Integer, primary_key=True, autoincrement=True)
     seller_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.category_id"), nullable=False)
-
-    title = Column(String(200), nullable=False)
-    description = Column(String, nullable=True)
+    title = Column(Unicode(200), nullable=False)
+    description = Column(UnicodeText, nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
     condition = Column(String(20), nullable=False)
-    status = Column(String(20), default="Available")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String(20), nullable=False, default="Available")
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
-    # Thiết lập mối quan hệ ORM
     seller = relationship("User")
     category = relationship("Category")
 
-    # Nối tiếp vào dưới cùng của backend/models.py
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        CheckConstraint("amount >= 0", name="CHK_Transaction_Amount"),
+        CheckConstraint(
+            "status IN ('Pending', 'Completed', 'Cancelled')", name="CHK_Transaction_Status"
+        ),
+    )
 
     transaction_id = Column(Integer, primary_key=True, autoincrement=True)
     product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False)
     buyer_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
-
     amount = Column(Numeric(10, 2), nullable=False)
-    status = Column(String(20), default="Pending")
-    transaction_date = Column(DateTime, default=datetime.utcnow)
+    status = Column(String(20), nullable=False, default="Pending")
+    transaction_date = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
-    # Thiết lập liên kết ORM để dễ dàng truy vấn lồng (subqueries) sau này
     product = relationship("Product")
     buyer = relationship("User")
