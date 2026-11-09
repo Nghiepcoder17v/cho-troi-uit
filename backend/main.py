@@ -1,10 +1,12 @@
 import math
+import os
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, aliased, joinedload
 
 import models
 import schemas
@@ -17,6 +19,19 @@ app = FastAPI(
     title="Chợ Trời UIT API",
     description="Backend API cho hệ thống giao dịch nội bộ sinh viên UIT",
     version="1.1.0",
+)
+
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -124,18 +139,6 @@ def list_products(
     }
 
 
-@app.get("/api/products/{product_id}", response_model=schemas.ProductEnvelope)
-def get_product(product_id: int, db: Session = Depends(get_db)):
-    product = db.scalar(
-        select(models.Product)
-        .options(joinedload(models.Product.seller))
-        .where(models.Product.product_id == product_id)
-    )
-    if product is None or product.status == "Hidden":
-        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
-    return {"status": "success", "data": product}
-
-
 @app.post("/api/products", response_model=schemas.ProductCreatedEnvelope, status_code=201)
 def create_product(
     body: schemas.ProductCreate,
@@ -161,6 +164,80 @@ def create_product(
         "message": "Product listed successfully",
         "data": {"product_id": product.product_id},
     }
+
+
+@app.get("/api/products/mine", response_model=schemas.ProductHistoryListEnvelope)
+def list_my_products(
+    status: Optional[schemas.ProductStatus] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    conditions = [models.Product.seller_id == current_user.user_id]
+    if status is not None:
+        conditions.append(models.Product.status == status)
+    total = db.scalar(select(func.count()).select_from(models.Product).where(*conditions)) or 0
+    rows = db.scalars(
+        select(models.Product)
+        .options(joinedload(models.Product.seller))
+        .where(*conditions)
+        .order_by(models.Product.created_at.desc(), models.Product.product_id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return {
+        "status": "success",
+        "data": rows,
+        "pagination": {
+            "current_page": page,
+            "page_size": page_size,
+            "total_items": total,
+            "total_pages": math.ceil(total / page_size),
+        },
+    }
+
+
+@app.get("/api/products/{product_id}", response_model=schemas.ProductEnvelope)
+def get_product(product_id: int, db: Session = Depends(get_db)):
+    product = db.scalar(
+        select(models.Product)
+        .options(joinedload(models.Product.seller))
+        .where(models.Product.product_id == product_id)
+    )
+    if product is None or product.status == "Hidden":
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+    return {"status": "success", "data": product}
+
+
+@app.patch("/api/products/{product_id}", response_model=schemas.ProductEnvelope)
+def update_product(
+    product_id: int,
+    body: schemas.ProductUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    product = db.scalar(
+        select(models.Product)
+        .options(joinedload(models.Product.seller))
+        .where(
+            models.Product.product_id == product_id,
+            models.Product.seller_id == current_user.user_id,
+        )
+    )
+    if product is None:
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+    if product.status == "Sold":
+        raise HTTPException(status_code=400, detail="Không thể chỉnh sửa sản phẩm đã bán")
+    if body.category_id is not None and db.get(models.Category, body.category_id) is None:
+        raise HTTPException(status_code=404, detail="Danh mục không tồn tại")
+
+    changes = body.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(product, field, value)
+    db.commit()
+    db.refresh(product)
+    return {"status": "success", "data": product}
 
 
 # ==========================================================================
@@ -207,3 +284,51 @@ def create_transaction(
         raise HTTPException(status_code=409, detail="Sản phẩm này đã được bán")
     db.refresh(transaction)
     return {"status": "success", "message": "Đặt mua thành công", "data": transaction}
+
+
+def _transaction_history(
+    db: Session,
+    user_id: int,
+    *,
+    buyer: bool,
+) -> list[dict]:
+    buyer_user = aliased(models.User)
+    seller_user = aliased(models.User)
+    user_column = models.Transaction.buyer_id if buyer else models.Product.seller_id
+    rows = db.execute(
+        select(models.Transaction, models.Product, buyer_user, seller_user)
+        .join(models.Product, models.Transaction.product_id == models.Product.product_id)
+        .join(buyer_user, models.Transaction.buyer_id == buyer_user.user_id)
+        .join(seller_user, models.Product.seller_id == seller_user.user_id)
+        .where(user_column == user_id)
+        .order_by(models.Transaction.transaction_date.desc(), models.Transaction.transaction_id.desc())
+    ).all()
+    return [
+        {
+            "transaction_id": transaction.transaction_id,
+            "product_id": transaction.product_id,
+            "amount": transaction.amount,
+            "status": transaction.status,
+            "transaction_date": transaction.transaction_date,
+            "product_title": product.title,
+            "buyer": {"user_id": buyer_user.user_id, "full_name": buyer_user.full_name},
+            "seller": {"user_id": seller_user.user_id, "full_name": seller_user.full_name},
+        }
+        for transaction, product, buyer_user, seller_user in rows
+    ]
+
+
+@app.get("/api/transactions/purchases", response_model=schemas.TransactionHistoryListEnvelope)
+def list_purchases(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return {"status": "success", "data": _transaction_history(db, current_user.user_id, buyer=True)}
+
+
+@app.get("/api/transactions/sales", response_model=schemas.TransactionHistoryListEnvelope)
+def list_sales(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return {"status": "success", "data": _transaction_history(db, current_user.user_id, buyer=False)}

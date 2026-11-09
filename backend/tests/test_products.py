@@ -72,3 +72,49 @@ def test_hidden_product_is_not_public(client, seller_headers, product_id, sessio
 def test_categories(client):
     names = [c["category_name"] for c in client.get("/api/categories").json()["data"]]
     assert names == ["Giáo trình", "Linh kiện IT", "Khác"]
+
+
+def test_my_products_only_returns_products_owned_by_current_user(client, seller_headers, buyer_headers):
+    own = create(client, seller_headers, title="Tin của người bán")
+    other = create(client, buyer_headers, title="Tin của người mua")
+    own_id = own.json()["data"]["product_id"]
+    other_id = other.json()["data"]["product_id"]
+
+    response = client.get("/api/products/mine", headers=seller_headers)
+
+    assert response.status_code == 200
+    assert [item["product_id"] for item in response.json()["data"]] == [own_id]
+    assert other_id not in [item["product_id"] for item in response.json()["data"]]
+
+
+def test_owner_can_update_and_hide_product(client, seller_headers, product_id):
+    response = client.patch(
+        f"/api/products/{product_id}",
+        headers=seller_headers,
+        json={"title": "Tiêu đề mới", "status": "Hidden"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["title"] == "Tiêu đề mới"
+    assert response.json()["data"]["status"] == "Hidden"
+    assert client.get(f"/api/products/{product_id}").status_code == 404
+
+
+def test_user_cannot_update_another_users_product(client, buyer_headers, product_id):
+    response = client.patch(
+        f"/api/products/{product_id}",
+        headers=buyer_headers,
+        json={"title": "Không được phép"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_owner_cannot_manually_mark_product_sold(client, seller_headers, product_id):
+    response = client.patch(
+        f"/api/products/{product_id}",
+        headers=seller_headers,
+        json={"status": "Sold"},
+    )
+
+    assert response.status_code == 422

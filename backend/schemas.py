@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 Condition = Literal["Brand New", "Like New", "Good", "Fair"]
 ProductStatus = Literal["Available", "Sold", "Hidden"]
+ProductVisibility = Literal["Available", "Hidden"]
 
 _EMAIL_RE = re.compile(r"^[a-z0-9._+-]+@gm\.uit\.edu\.vn$")
 _STUDENT_ID_RE = re.compile(r"^\d{8}$")
@@ -116,6 +117,25 @@ class ProductCreate(BaseModel):
         return v
 
 
+class ProductUpdate(BaseModel):
+    category_id: Optional[int] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    price: Optional[Decimal] = Field(None, ge=0, le=MAX_PRICE, decimal_places=2)
+    condition: Optional[Condition] = None
+    status: Optional[ProductVisibility] = None
+
+    @field_validator("title")
+    @classmethod
+    def _title(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("Tiêu đề không được để trống")
+        return v
+
+
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -157,6 +177,12 @@ class TransactionOut(BaseModel):
     transaction_date: datetime
 
 
+class TransactionHistoryOut(TransactionOut):
+    product_title: str
+    buyer: SellerOut
+    seller: SellerOut
+
+
 # ---------------------------------------------------------------- ENVELOPES (theo API contract)
 class UserEnvelope(BaseModel):
     status: str = "success"
@@ -195,3 +221,14 @@ class TransactionEnvelope(BaseModel):
     status: str = "success"
     message: str
     data: TransactionOut
+
+
+class ProductHistoryListEnvelope(BaseModel):
+    status: str = "success"
+    data: list[ProductOut]
+    pagination: Pagination
+
+
+class TransactionHistoryListEnvelope(BaseModel):
+    status: str = "success"
+    data: list[TransactionHistoryOut]

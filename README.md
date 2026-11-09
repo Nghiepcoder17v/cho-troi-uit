@@ -264,9 +264,13 @@ Chi tiết request/response nằm trong [`docs/api_contract.md`](docs/api_contra
 | `GET` | `/api/users/me` | Thông tin tài khoản hiện tại | Có |
 | `GET` | `/api/categories` | Danh sách danh mục | Không |
 | `GET` | `/api/products` | Tìm kiếm và phân trang sản phẩm | Không |
+| `GET` | `/api/products/mine` | Danh sách sản phẩm của tôi | Có |
 | `GET` | `/api/products/{product_id}` | Xem chi tiết sản phẩm | Không |
 | `POST` | `/api/products` | Đăng sản phẩm | Có |
+| `PATCH` | `/api/products/{product_id}` | Cập nhật hoặc ẩn sản phẩm của tôi | Có |
 | `POST` | `/api/transactions` | Đặt mua sản phẩm | Có |
+| `GET` | `/api/transactions/purchases` | Lịch sử mua hàng | Có |
+| `GET` | `/api/transactions/sales` | Lịch sử bán hàng | Có |
 
 Quy tắc nghiệp vụ chính:
 

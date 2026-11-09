@@ -55,3 +55,22 @@ def test_failed_purchase_leaves_product_available(client, buyer_headers, seller_
     buy(client, buyer_headers, product_id, amount=10**7)  # bị từ chối (quá giá)
     with session_factory() as s:
         assert s.get(models.Product, product_id).status == "Available"
+
+
+def test_purchase_and_sales_history_include_both_parties(client, buyer_headers, seller_headers, product_id):
+    response = buy(client, buyer_headers, product_id, amount=40000)
+    transaction_id = response.json()["data"]["transaction_id"]
+
+    purchases = client.get("/api/transactions/purchases", headers=buyer_headers)
+    sales = client.get("/api/transactions/sales", headers=seller_headers)
+
+    assert purchases.status_code == 200
+    assert sales.status_code == 200
+    assert purchases.json()["data"][0]["transaction_id"] == transaction_id
+    assert sales.json()["data"][0]["transaction_id"] == transaction_id
+    assert purchases.json()["data"][0]["buyer"]["user_id"] != purchases.json()["data"][0]["seller"]["user_id"]
+
+
+def test_transaction_history_requires_auth(client):
+    assert client.get("/api/transactions/purchases").status_code == 401
+    assert client.get("/api/transactions/sales").status_code == 401

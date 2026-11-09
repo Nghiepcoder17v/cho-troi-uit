@@ -97,6 +97,18 @@ Sắp xếp mới nhất trước. **200 OK**
 ```
 Lỗi: `401`, `404` (danh mục không tồn tại), `422`.
 
+### Sản phẩm của tôi — `GET /api/products/mine` 🔒
+Trả về các sản phẩm do người dùng hiện tại đăng. Hỗ trợ `status`, `page` và
+`page_size`; sản phẩm `Hidden` chỉ xuất hiện ở endpoint riêng này khi người dùng
+là chủ sở hữu.
+
+### Cập nhật hoặc ẩn sản phẩm — `PATCH /api/products/{product_id}` 🔒
+Chỉ chủ sở hữu mới có thể cập nhật. Có thể cập nhật `category_id`, `title`,
+`description`, `price`, `condition` và `status`. Sản phẩm đã `Sold` không thể
+chỉnh sửa.
+`status` chỉ được chuyển giữa `Available` và `Hidden`; không thể tự chuyển tin
+đăng thành `Sold` nếu không có giao dịch.
+
 ---
 
 ## 3. Giao dịch (Transactions) 🔒
@@ -113,3 +125,10 @@ Chốt đơn **ngay lập tức** (MVP chưa có bước xác nhận): sản ph�
             "status": "Completed", "transaction_date": "2026-11-08T12:30:00" } }
 ```
 Lỗi: `400` (tự mua hàng của mình / giá chốt > giá niêm yết), `404`, `409` (đã có người mua trước), `422`.
+
+### Lịch sử mua — `GET /api/transactions/purchases` 🔒
+Trả về các giao dịch mà người dùng hiện tại là buyer.
+
+### Lịch sử bán — `GET /api/transactions/sales` 🔒
+Trả về các giao dịch của các sản phẩm do người dùng hiện tại bán. Mỗi dòng bao
+gồm thông tin sản phẩm, buyer và seller.
