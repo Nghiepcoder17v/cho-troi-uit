@@ -18,6 +18,7 @@ giao dịch.
 - [Cài đặt](#cài-đặt)
 - [Cấu hình môi trường](#cấu-hình-môi-trường)
 - [Chạy backend](#chạy-backend)
+- [Chạy frontend](#chạy-frontend)
 - [Sinh và kiểm tra dữ liệu](#sinh-và-kiểm-tra-dữ-liệu)
 - [Chạy ETL và analytics](#chạy-etl-và-analytics)
 - [API chính](#api-chính)
@@ -192,6 +193,42 @@ Các địa chỉ hữu ích:
 - Health check: `http://localhost:8000/`
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
+
+## Chạy frontend
+
+Frontend MVP nằm trong thư mục `frontend/` và dùng React + TypeScript + Vite.
+Node.js 20 trở lên được khuyến nghị.
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+Mặc định frontend chạy tại `http://localhost:5173` và gọi backend tại
+`http://localhost:8000`. Có thể thay đổi bằng file `frontend/.env.local`:
+
+```dotenv
+VITE_API_URL=http://localhost:8000
+```
+
+Backend cần cho phép origin frontend bằng cấu hình ở `.env`:
+
+```dotenv
+CORS_ORIGINS=http://localhost:5173
+```
+
+Build production:
+
+```powershell
+npm run build
+npm run preview
+```
+
+MVP hiện có các màn hình: khám phá sản phẩm, lọc theo danh mục, đăng nhập/đăng
+ký, đăng bán, tài khoản, sản phẩm của tôi và lịch sử mua. Thiết kế dùng các
+panel bo tròn, khoảng trắng lớn, màu accent lime/orange/lilac và responsive cho
+mobile.
 
 ## Sinh và kiểm tra dữ liệu
 
