@@ -1,0 +1,87 @@
+// Dán vào https://dbdiagram.io để vẽ sơ đồ Star Schema của Data Warehouse (xuất ra docs/dwh_erd.png).
+// Phản chiếu data_pipeline/etl/dwh_schema.py  (đó mới là nguồn sự thật)
+
+Table fact_transactions {
+  transaction_id int [pk, note: 'degenerate dimension - id giao dịch từ OLTP']
+  product_key int [not null, ref: > dim_product.product_key]
+  buyer_user_key int [not null, ref: > dim_user.user_key, note: 'dim_user vai trò NGƯỜI MUA']
+  seller_user_key int [not null, ref: > dim_user.user_key, note: 'dim_user vai trò NGƯỜI BÁN']
+  transaction_date_key int [not null, ref: > dim_date.date_key]
+  listed_date_key int [not null, ref: > dim_date.date_key]
+  transaction_status varchar(20) [note: 'Pending | Completed | Cancelled']
+  is_completed smallint [note: '1/0 để SUM trực tiếp']
+  list_price decimal(10,2)
+  amount decimal(10,2) [note: 'giá chốt']
+  discount_amount decimal(10,2) [note: 'list_price - amount']
+  discount_pct decimal(5,2) [note: 'NULL nếu list_price = 0']
+  days_to_sell decimal(10,2) [note: 'chỉ có với giao dịch Completed']
+  transaction_at datetime
+  source_updated_at datetime
+  etl_loaded_at datetime
+}
+
+Table dim_user {
+  user_key int [pk, increment]
+  user_id int [unique, note: 'khoá tự nhiên từ OLTP']
+  cohort_year smallint [note: 'suy ra từ 2 chữ số đầu MSSV']
+  full_name nvarchar(100)
+  major nvarchar(50) [note: 'đã chuẩn hoá']
+  user_created_at datetime
+  etl_loaded_at datetime
+}
+
+Table dim_product {
+  product_key int [pk, increment]
+  product_id int [unique]
+  category_id int
+  category_name nvarchar(50) [note: 'gộp danh mục vào đây (star, không snowflake)']
+  title nvarchar(200)
+  condition varchar(20)
+  list_price decimal(10,2)
+  current_status varchar(20) [note: 'SCD loại 1: trạng thái HIỆN TẠI']
+  listed_at datetime
+  etl_loaded_at datetime
+}
+
+Table dim_date {
+  date_key int [pk, note: 'YYYYMMDD']
+  full_date date [unique]
+  calendar_year smallint
+  calendar_quarter smallint
+  calendar_month smallint
+  year_month varchar(7)
+  month_name nvarchar(20)
+  day_of_month smallint
+  day_of_week smallint [note: '1 = Thứ Hai']
+  day_name nvarchar(20)
+  week_of_year smallint
+  is_weekend smallint
+  academic_term nvarchar(10) [note: 'HK1 / HK2 / Hè (giả định)']
+}
+
+// ---- Bảng điều khiển của pipeline ----
+Table etl_watermark {
+  source_table varchar(50) [pk]
+  last_updated_at datetime [note: 'max(updated_at) đã nạp']
+  last_run_id int
+}
+Table etl_run_log {
+  run_id int [pk, increment]
+  mode varchar(20) [note: 'initial | incremental | full']
+  status varchar(30) [note: 'RUNNING | SUCCESS | WARNING | FAILED']
+  started_at datetime
+  finished_at datetime
+  users_extracted int
+  products_extracted int
+  transactions_extracted int
+  rows_rejected int
+  message text
+}
+Table etl_rejected_rows {
+  rejected_id int [pk, increment]
+  run_id int
+  source_table varchar(50)
+  source_id int
+  reason nvarchar(200)
+  rejected_at datetime
+}
