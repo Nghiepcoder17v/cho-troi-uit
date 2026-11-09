@@ -1,4 +1,6 @@
 bcrypt==5.0.0
+numpy==2.5.4
+pandas==3.1.1
 python-dotenv==1.2.4
 pyodbc==5.5.0
 SQLAlchemy==2.1.8
