@@ -3,6 +3,7 @@ import type {
   Condition,
   Pagination,
   Product,
+  SellerReputation,
   TransactionHistory,
   User,
 } from "./types";
@@ -91,4 +92,12 @@ export async function getMyProducts(): Promise<Product[]> {
 
 export async function getPurchases(): Promise<TransactionHistory[]> {
   return (await request<Envelope<TransactionHistory[]>>("/api/transactions/purchases")).data;
+}
+
+export async function getSales(): Promise<TransactionHistory[]> {
+  return (await request<Envelope<TransactionHistory[]>>("/api/transactions/sales")).data;
+}
+
+export async function getSellerReputation(userId: number): Promise<SellerReputation> {
+  return (await request<Envelope<SellerReputation>>(`/api/users/${userId}/reputation`)).data;
 }

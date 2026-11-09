@@ -6,12 +6,14 @@ import {
   getMe,
   getMyProducts,
   getPurchases,
+  getSales,
+  getSellerReputation,
   listCategories,
   listProducts,
   login,
   register,
 } from "./api";
-import type { Category, Condition, Product, TransactionHistory, User } from "./types";
+import type { Category, Condition, Product, SellerReputation, TransactionHistory, User } from "./types";
 
 const money = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 const conditions: Condition[] = ["Brand New", "Like New", "Good", "Fair"];
@@ -26,7 +28,13 @@ function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [purchases, setPurchases] = useState<TransactionHistory[]>([]);
+  const [sales, setSales] = useState<TransactionHistory[]>([]);
   const [myProducts, setMyProducts] = useState<Product[]>([]);
+  const [cart, setCart] = useState<Product[]>(() => {
+    try { return JSON.parse(localStorage.getItem("cart") ?? "[]") as Product[]; } catch { return []; }
+  });
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [showCart, setShowCart] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -48,9 +56,10 @@ function App() {
 
   useEffect(() => {
     if (view === "market") void refreshProducts();
-    if (view === "account" && user) void Promise.all([getMyProducts(), getPurchases()]).then(([mine, bought]) => {
+    if (view === "account" && user) void Promise.all([getMyProducts(), getPurchases(), getSales()]).then(([mine, bought, sold]) => {
       setMyProducts(mine);
       setPurchases(bought);
+      setSales(sold);
     }).catch((reason) => setError(reason instanceof Error ? reason.message : "Không thể tải tài khoản"));
   }, [view, category]);
 
@@ -62,18 +71,45 @@ function App() {
     setView("market");
   };
 
-  const handleBuy = async (product: Product) => {
+  const addToCart = (product: Product) => {
     if (!user) {
       setAuthMode("login");
       setShowAuth(true);
       return;
     }
+    if (!cart.some((item) => item.product_id === product.product_id)) {
+      const next = [...cart, product];
+      setCart(next);
+      localStorage.setItem("cart", JSON.stringify(next));
+      setNotice("Đã thêm sản phẩm vào giỏ hàng.");
+    }
+  };
+
+  const removeFromCart = (productId: number) => {
+    const next = cart.filter((item) => item.product_id !== productId);
+    setCart(next);
+    localStorage.setItem("cart", JSON.stringify(next));
+  };
+
+  const checkout = async () => {
+    if (!cart.length) return;
+    const purchasedIds: number[] = [];
     try {
-      await buyProduct(product.product_id, product.price);
-      setNotice("Đặt mua thành công — sản phẩm đã được giữ cho bạn.");
+      for (const product of cart) {
+        await buyProduct(product.product_id, product.price);
+        purchasedIds.push(product.product_id);
+      }
+      setCart([]);
+      localStorage.removeItem("cart");
+      setShowCart(false);
+      setNotice("Thanh toán thành công. Các sản phẩm đã được ghi vào lịch sử mua.");
       await refreshProducts();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể đặt mua");
+      const remaining = cart.filter((item) => !purchasedIds.includes(item.product_id));
+      setCart(remaining);
+      localStorage.setItem("cart", JSON.stringify(remaining));
+      setError(reason instanceof Error ? reason.message : "Không thể hoàn tất thanh toán");
+      await refreshProducts();
     }
   };
 
@@ -92,6 +128,7 @@ function App() {
         {user ? (
           <button className="user-chip" onClick={() => setView("account")}><span>{user.full_name.slice(0, 1)}</span>{user.full_name}</button>
         ) : <button className="outline-button" onClick={() => { setAuthMode("login"); setShowAuth(true); }}>Đăng nhập</button>}
+        <button className="cart-button" onClick={() => setShowCart(true)}>Giỏ hàng <b>{cart.length}</b></button>
       </header>
 
       {notice && <div className="toast success">{notice}<button onClick={() => setNotice("")}>×</button></div>}
@@ -114,23 +151,36 @@ function App() {
         </section>
         <section className="section-block product-section">
           <div className="section-heading"><div><p className="eyebrow">Mới đăng gần đây</p><h2>{category ? categories.find((item) => item.category_id === category)?.category_name : "Món đồ đang được tìm kiếm"}</h2></div><span className="result-count">{products.length} tin đăng</span></div>
-          <div className="product-grid">{products.map((product) => <ProductCard key={product.product_id} product={product} onBuy={() => void handleBuy(product)} />)}</div>
+          <div className="product-grid">{products.map((product) => <ProductCard key={product.product_id} product={product} onView={() => setSelectedProduct(product)} />)}</div>
           {!products.length && <div className="empty-state">Chưa có sản phẩm phù hợp. Hãy thử từ khóa khác.</div>}
         </section>
         {featured.length > 0 && <section className="wide-banner"><div><p className="eyebrow">Dành cho bạn</p><h2>Một vòng quanh chợ,<br />một món đồ vừa ý.</h2><button className="dark-button" onClick={() => setQuery("")}>Xem thêm sản phẩm <span>↗</span></button></div><div className="banner-shape">✳</div></section>}
       </main>}
 
       {view === "sell" && <SellView user={user} categories={categories} onLogin={() => { setAuthMode("login"); setShowAuth(true); }} onCreated={() => { setView("market"); void refreshProducts(); setNotice("Tin đăng của bạn đã được tạo."); }} />}
-      {view === "account" && user && <AccountView user={user} products={myProducts} purchases={purchases} onSignOut={signOut} />}
+      {view === "account" && user && <AccountView user={user} products={myProducts} purchases={purchases} sales={sales} onSignOut={signOut} />}
       {view === "account" && !user && <div className="empty-state account-empty">Đăng nhập để xem tài khoản của bạn.</div>}
+      {selectedProduct && <ProductDetail product={selectedProduct} onClose={() => setSelectedProduct(null)} onAdd={() => { addToCart(selectedProduct); setSelectedProduct(null); }} />}
+      {showCart && <CartDrawer cart={cart} onClose={() => setShowCart(false)} onRemove={removeFromCart} onCheckout={() => void checkout()} />}
       {showAuth && <AuthModal mode={authMode} onClose={() => setShowAuth(false)} onModeChange={setAuthMode} onAuthenticated={(nextUser) => { setUser(nextUser); setShowAuth(false); }} />}
       <footer><span>chợ trời UIT</span><span>Made for the UIT community · 2026</span></footer>
     </div>
   );
 }
 
-function ProductCard({ product, onBuy }: { product: Product; onBuy: () => void }) {
-  return <article className="product-card"><div className={`product-image image-${product.product_id % 4}`}><span className="condition-tag">{product.condition}</span><span className="image-glyph">{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span></div><div className="product-info"><div><h3>{product.title}</h3><p>{product.seller.full_name}</p></div><strong>{money.format(product.price)}</strong></div><button className="buy-button" onClick={onBuy} disabled={product.status !== "Available"}>{product.status === "Available" ? "Xem & đặt mua" : "Đã bán"} <span>↗</span></button></article>;
+function ProductCard({ product, onView }: { product: Product; onView: () => void }) {
+  return <article className="product-card"><div className={`product-image image-${product.product_id % 4}`}><span className="condition-tag">{product.condition}</span><span className="image-glyph">{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span></div><div className="product-info"><div><h3>{product.title}</h3><p>{product.seller.full_name}</p></div><strong>{money.format(product.price)}</strong></div><button className="buy-button" onClick={onView}>{product.status === "Available" ? "Xem chi tiết" : "Đã bán"} <span>↗</span></button></article>;
+}
+
+function ProductDetail({ product, onClose, onAdd }: { product: Product; onClose: () => void; onAdd: () => void }) {
+  const [reputation, setReputation] = useState<SellerReputation | null>(null);
+  useEffect(() => { void getSellerReputation(product.seller.user_id).then(setReputation); }, [product.seller.user_id]);
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="detail-modal"><button className="close-button" onClick={onClose}>×</button><div className={`detail-image image-${product.product_id % 4}`}><span className="image-glyph">{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span></div><div className="detail-content"><p className="eyebrow">{product.condition} · Chi tiết sản phẩm</p><h2>{product.title}</h2><strong className="detail-price">{money.format(product.price)}</strong><p className="detail-description">{product.description || "Người bán chưa thêm mô tả cho sản phẩm này."}</p><div className="trust-card"><span className="trust-icon">✓</span><div><strong>Điểm uy tín người bán</strong><small>{reputation ? `${reputation.score}/5 · ${reputation.label} · ${reputation.completed_sales} giao dịch hoàn tất` : "Đang tải thông tin uy tín..."}</small></div><div className="trust-bar"><i style={{ width: `${(reputation?.score ?? 0) * 20}%` }} /></div></div><button className="dark-button submit-button" onClick={onAdd} disabled={product.status !== "Available"}>{product.status === "Available" ? "Thêm vào giỏ hàng ↗" : "Sản phẩm đã bán"}</button></div></section></div>;
+}
+
+function CartDrawer({ cart, onClose, onRemove, onCheckout }: { cart: Product[]; onClose: () => void; onRemove: (id: number) => void; onCheckout: () => void }) {
+  const total = cart.reduce((sum, item) => sum + item.price, 0);
+  return <div className="modal-backdrop drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><aside className="cart-drawer"><button className="close-button" onClick={onClose}>×</button><p className="eyebrow">Mua có chọn lọc</p><h2>Giỏ hàng <span>{cart.length}</span></h2>{cart.length ? <><div className="cart-items">{cart.map((item) => <div className="cart-item" key={item.product_id}><span className={`mini-image image-${item.product_id % 4}`}>{["⌨", "◒", "▤", "✦"][item.product_id % 4]}</span><div><strong>{item.title}</strong><small>{money.format(item.price)}</small></div><button onClick={() => onRemove(item.product_id)}>×</button></div>)}</div><div className="cart-total"><span>Tạm tính</span><strong>{money.format(total)}</strong></div><button className="dark-button submit-button" onClick={onCheckout}>Xác nhận mua hàng ↗</button><small className="muted">Mỗi sản phẩm sẽ được giữ chỗ khi bạn xác nhận.</small></> : <div className="empty-state">Giỏ hàng đang trống.</div>}</aside></div>;
 }
 
 function SellView({ user, categories, onLogin, onCreated }: { user: User | null; categories: Category[]; onLogin: () => void; onCreated: () => void }) {
@@ -141,8 +191,10 @@ function SellView({ user, categories, onLogin, onCreated }: { user: User | null;
   return <main className="form-page"><div className="form-intro"><p className="eyebrow">Đăng bán một món đồ</p><h1>Cho món đồ của bạn<br /><em>một vòng đời mới.</em></h1><p>Thông tin rõ ràng giúp món đồ tìm được chủ mới nhanh hơn.</p></div><form className="listing-form" onSubmit={(event) => void submit(event)}>{error && <div className="form-error">{error}</div>}<label>Tiêu đề<input required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Ví dụ: Bàn phím cơ Keychron K2" /></label><div className="two-fields"><label>Giá bán (VND)<input required type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="450000" /></label><label>Tình trạng<select value={form.condition} onChange={(event) => setForm({ ...form, condition: event.target.value as Condition })}>{conditions.map((item) => <option key={item}>{item}</option>)}</select></label></div><label>Danh mục<select value={form.category_id} onChange={(event) => setForm({ ...form, category_id: Number(event.target.value) })}>{categories.map((item) => <option key={item.category_id} value={item.category_id}>{item.category_name}</option>)}</select></label><label>Mô tả<textarea rows={4} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Món đồ còn mới không? Có phụ kiện gì đi kèm?" /></label><button className="dark-button submit-button">Đăng tin ngay <span>↗</span></button></form></main>;
 }
 
-function AccountView({ user, products, purchases, onSignOut }: { user: User; products: Product[]; purchases: TransactionHistory[]; onSignOut: () => void }) {
-  return <main className="account-page"><div className="account-header"><div className="profile-avatar">{user.full_name.slice(0, 1)}</div><div><p className="eyebrow">Tài khoản của bạn</p><h1>{user.full_name}</h1><p>{user.email} · {user.major ?? "Sinh viên UIT"}</p></div><button className="outline-button" onClick={onSignOut}>Đăng xuất</button></div><div className="account-columns"><section><div className="section-heading"><h2>Tin đăng của tôi</h2><span className="result-count">{products.length}</span></div>{products.length ? products.map((product) => <div className="history-row" key={product.product_id}><span className={`mini-image image-${product.product_id % 4}`}>{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span><div><strong>{product.title}</strong><small>{product.status} · {money.format(product.price)}</small></div></div>) : <p className="muted">Bạn chưa đăng tin nào.</p>}</section><section><div className="section-heading"><h2>Lịch sử mua</h2><span className="result-count">{purchases.length}</span></div>{purchases.length ? purchases.map((item) => <div className="history-row" key={item.transaction_id}><span className="mini-image image-2">↗</span><div><strong>{item.product_title}</strong><small>{item.status} · {money.format(item.amount)}</small></div></div>) : <p className="muted">Bạn chưa có giao dịch mua.</p>}</section></div></main>;
+function AccountView({ user, products, purchases, sales, onSignOut }: { user: User; products: Product[]; purchases: TransactionHistory[]; sales: TransactionHistory[]; onSignOut: () => void }) {
+  const spent = purchases.reduce((sum, item) => sum + item.amount, 0);
+  const earned = sales.reduce((sum, item) => sum + item.amount, 0);
+  return <main className="account-page"><div className="account-header"><div className="profile-avatar">{user.full_name.slice(0, 1)}</div><div><p className="eyebrow">Tài khoản của bạn</p><h1>{user.full_name}</h1><p>{user.email} · {user.major ?? "Sinh viên UIT"}</p></div><button className="outline-button" onClick={onSignOut}>Đăng xuất</button></div><div className="account-stats"><div><small>Tổng đã chi</small><strong>{money.format(spent)}</strong></div><div><small>Tổng doanh thu</small><strong>{money.format(earned)}</strong></div><div><small>Giao dịch mua</small><strong>{purchases.length}</strong></div></div><div className="account-columns"><section><div className="section-heading"><h2>Tin đăng của tôi</h2><span className="result-count">{products.length}</span></div>{products.length ? products.map((product) => <div className="history-row" key={product.product_id}><span className={`mini-image image-${product.product_id % 4}`}>{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span><div><strong>{product.title}</strong><small>{product.status} · {money.format(product.price)}</small></div></div>) : <p className="muted">Bạn chưa đăng tin nào.</p>}</section><section><div className="section-heading"><h2>Lịch sử mua</h2><span className="result-count">{purchases.length}</span></div>{purchases.length ? purchases.map((item) => <div className="history-row" key={item.transaction_id}><span className="mini-image image-2">↗</span><div><strong>{item.product_title}</strong><small>{item.status} · {money.format(item.amount)}</small></div></div>) : <p className="muted">Bạn chưa có giao dịch mua.</p>}</section></div></main>;
 }
 
 function AuthModal({ mode, onClose, onModeChange, onAuthenticated }: { mode: "login" | "register"; onClose: () => void; onModeChange: (mode: "login" | "register") => void; onAuthenticated: (user: User) => void }) {

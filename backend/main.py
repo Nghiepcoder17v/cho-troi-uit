@@ -210,6 +210,45 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     return {"status": "success", "data": product}
 
 
+@app.get("/api/users/{user_id}/reputation", response_model=schemas.SellerReputationEnvelope)
+def get_seller_reputation(user_id: int, db: Session = Depends(get_db)):
+    if db.get(models.User, user_id) is None:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+
+    total_sales = db.scalar(
+        select(func.count(models.Transaction.transaction_id))
+        .join(models.Product, models.Transaction.product_id == models.Product.product_id)
+        .where(models.Product.seller_id == user_id)
+    ) or 0
+    completed_sales = db.scalar(
+        select(func.count(models.Transaction.transaction_id))
+        .join(models.Product, models.Transaction.product_id == models.Product.product_id)
+        .where(
+            models.Product.seller_id == user_id,
+            models.Transaction.status == "Completed",
+        )
+    ) or 0
+    score = round(min(5.0, 3.0 + min(completed_sales, 20) * 0.1), 1)
+    if completed_sales == 0:
+        label = "Người bán mới"
+    elif score >= 4.8:
+        label = "Rất uy tín"
+    elif score >= 4.2:
+        label = "Uy tín"
+    else:
+        label = "Đang xây dựng uy tín"
+    return {
+        "status": "success",
+        "data": {
+            "user_id": user_id,
+            "score": score,
+            "completed_sales": completed_sales,
+            "total_sales": total_sales,
+            "label": label,
+        },
+    }
+
+
 @app.patch("/api/products/{product_id}", response_model=schemas.ProductEnvelope)
 def update_product(
     product_id: int,

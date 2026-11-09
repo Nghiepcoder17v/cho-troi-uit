@@ -85,6 +85,14 @@ class SellerOut(BaseModel):
     full_name: str
 
 
+class SellerReputationOut(BaseModel):
+    user_id: int
+    score: float
+    completed_sales: int
+    total_sales: int
+    label: str
+
+
 class TokenOut(BaseModel):
     token: str
     token_type: str = "bearer"
@@ -232,3 +240,8 @@ class ProductHistoryListEnvelope(BaseModel):
 class TransactionHistoryListEnvelope(BaseModel):
     status: str = "success"
     data: list[TransactionHistoryOut]
+
+
+class SellerReputationEnvelope(BaseModel):
+    status: str = "success"
+    data: SellerReputationOut

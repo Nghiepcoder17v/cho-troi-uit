@@ -54,6 +54,10 @@ Lỗi: `401` (sai email hoặc mật khẩu — cùng một thông báo cho cả
 ### Thông tin tài khoản — `GET /api/users/me` 🔒
 Trả về `{"status": "success", "data": { ...như phần data khi đăng ký... }}`.
 
+### Điểm uy tín người bán — `GET /api/users/{user_id}/reputation`
+Trả về điểm từ 0–5 được tính từ số giao dịch hoàn tất của người bán, số giao dịch
+và nhãn diễn giải (`Người bán mới`, `Đang xây dựng uy tín`, `Uy tín` hoặc `Rất uy tín`).
+
 ---
 
 ## 2. Danh mục & Sản phẩm
@@ -114,7 +118,10 @@ chỉnh sửa.
 ## 3. Giao dịch (Transactions) 🔒
 
 ### Đặt mua — `POST /api/transactions`
-Chốt đơn **ngay lập tức** (MVP chưa có bước xác nhận): sản phẩm chuyển `Available → Sold` và tạo giao dịch `Completed` trong cùng một lần commit. `amount` là giá chốt, được phép thấp hơn giá niêm yết (mặc cả) nhưng **không được cao hơn**.
+Endpoint chỉ được gọi sau khi người dùng xem chi tiết, thêm sản phẩm vào giỏ hàng
+và xác nhận checkout. Sản phẩm chuyển `Available → Sold` và tạo giao dịch
+`Completed` trong cùng một lần commit. `amount` là giá chốt, được phép thấp hơn
+giá niêm yết (mặc cả) nhưng **không được cao hơn**.
 ```json
 { "product_id": 15, "amount": 1150000 }
 ```

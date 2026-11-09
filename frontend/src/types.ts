@@ -6,6 +6,14 @@ export interface Seller {
   full_name: string;
 }
 
+export interface SellerReputation {
+  user_id: number;
+  score: number;
+  completed_sales: number;
+  total_sales: number;
+  label: string;
+}
+
 export interface Product {
   product_id: number;
   category_id: number;
