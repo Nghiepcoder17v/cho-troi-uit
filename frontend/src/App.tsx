@@ -42,7 +42,7 @@ function App() {
   useEffect(() => {
     void Promise.all([listCategories(), refreshProducts()])
       .then(([loadedCategories]) => setCategories(loadedCategories))
-      .catch(() => undefined);
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Không thể tải dữ liệu"));
     if (localStorage.getItem("access_token")) void getMe().then(setUser).catch(() => localStorage.removeItem("access_token"));
   }, []);
 
