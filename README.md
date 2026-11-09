@@ -1,149 +1,383 @@
-# Chợ Trời UIT (UIT Exchange)
+# Chợ Trời UIT
 
-Dự án cá nhân: hệ thống mua bán trao đổi đồ cũ nội bộ sinh viên UIT (C2C) **kết hợp** Data Pipeline phân tích hành vi giao dịch (định hướng Data Engineer).
+Hệ thống mua bán và trao đổi đồ cũ nội bộ dành cho sinh viên UIT (C2C), kết hợp
+backend REST, cơ sở dữ liệu giao dịch và data pipeline phục vụ phân tích hành vi
+giao dịch.
 
-## 🗺️ Kiến trúc & luồng dữ liệu
+> Trạng thái hiện tại: backend và data pipeline đã có test tự động trên SQLite.
+> Frontend, Docker Compose, lập lịch ETL và kiểm thử đầy đủ trên SQL Server là
+> các hạng mục tiếp theo.
+
+## Mục lục
+
+- [Tổng quan](#tổng-quan)
+- [Kiến trúc](#kiến-trúc)
+- [Cấu trúc dự án](#cấu-trúc-dự-án)
+- [Công nghệ](#công-nghệ)
+- [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
+- [Cài đặt](#cài-đặt)
+- [Cấu hình môi trường](#cấu-hình-môi-trường)
+- [Chạy backend](#chạy-backend)
+- [Sinh và kiểm tra dữ liệu](#sinh-và-kiểm-tra-dữ-liệu)
+- [Chạy ETL và analytics](#chạy-etl-và-analytics)
+- [API chính](#api-chính)
+- [Thiết kế dữ liệu](#thiết-kế-dữ-liệu)
+- [Kiểm thử](#kiểm-thử)
+- [Bảo mật và toàn vẹn dữ liệu](#bảo-mật-và-toàn-vẹn-dữ-liệu)
+- [Lộ trình phát triển](#lộ-trình-phát-triển)
+
+## Tổng quan
+
+Chợ Trời UIT giải quyết hai nhóm nhu cầu:
+
+1. **OLTP marketplace:** sinh viên đăng bán sản phẩm, tìm kiếm sản phẩm và đặt
+   mua với xác thực JWT.
+2. **OLAP analytics:** dữ liệu giao dịch được trích xuất tăng dần, làm sạch và
+   nạp vào Data Warehouse dạng Star Schema để chạy các báo cáo phân tích.
+
+Luồng dữ liệu:
 
 ```mermaid
 flowchart LR
-    FE["Frontend<br/>(React / HTML) 🔜"] -->|REST + JWT| API["Backend FastAPI ✅"]
-    API -->|SQLAlchemy| OLTP[("SQL Server<br/>OLTP ✅")]
-    GEN["generate_seed.py ✅<br/>dữ liệu giả nhất quán"] --> OLTP
-    OLTP -->|"Incremental Extract<br/>WHERE updated_at > watermark"| ETL["ETL Python/Pandas ✅"]
-    ETL -->|"Upsert, 1 transaction"| DWH[("Data Warehouse<br/>Star Schema ✅")]
-    DWH --> SQL["SQL phân tích<br/>Window Function / CTE ✅"]
+    FE["Frontend (kế hoạch)"] -->|REST + JWT| API["FastAPI Backend"]
+    API -->|SQLAlchemy| OLTP[("SQL Server OLTP")]
+    SEED["generate_seed.py"] --> OLTP
+    OLTP -->|Incremental Extract| ETL["Python + Pandas ETL"]
+    ETL -->|Upsert trong một transaction| DWH[("Data Warehouse")]
+    DWH --> SQL["Analytics SQL"]
 ```
 
-- **OLTP**: tối ưu ghi/đọc nhanh và toàn vẹn dữ liệu (3NF, CHECK/UNIQUE/FK, filtered unique index chống bán trùng).
-- **OLAP**: ETL trích xuất *tăng dần* nhờ cột `updated_at` ở mọi bảng, làm sạch bằng Pandas rồi nạp vào Data Warehouse dạng Star Schema.
+## Kiến trúc
 
-## 📊 Tiến độ
+### Backend và OLTP
 
-| Hạng mục | Trạng thái |
-|---|---|
-| Thiết kế ERD, API contract | ✅ (`docs/`) |
-| Schema SQL Server + index + trigger `updated_at` | ✅ (chưa chạy thử trên SQL Server thật sau lần sửa gần nhất — xem *Kiểm thử*) |
-| Backend: đăng ký/đăng nhập JWT, sản phẩm, giao dịch | ✅ |
-| Sinh dữ liệu giả nhất quán + script kiểm tra | ✅ |
-| Frontend | 🔜 |
-| ETL incremental → Data Warehouse (Star Schema) | ✅ (test trên SQLite; chưa chạy thử trên SQL Server thật) |
-| Phân tích SQL (Window Function / CTE) | ✅ |
-| Lập lịch ETL tự động, Docker Compose | 🔜 |
+- FastAPI cung cấp REST API và Swagger tại `/docs`.
+- SQLAlchemy ORM ánh xạ các bảng `users`, `categories`, `products` và
+  `transactions`.
+- SQL Server là database triển khai chính.
+- Schema được tạo bằng SQL script; backend **không tự động tạo bảng**.
+- JWT xác thực người dùng và bcrypt băm mật khẩu.
 
-## 📂 Cấu trúc thư mục
+### Data pipeline và DWH
+
+Pipeline chạy theo các bước:
+
+1. **Extract:** lấy các dòng mới/thay đổi theo `updated_at` và watermark.
+2. **Transform:** chuẩn hóa chuỗi, ngành học, ngày tháng và tính các chỉ số.
+3. **Load:** upsert dimension trước, sau đó nạp fact trong một transaction.
+4. **Reconcile:** đối chiếu số dòng nguồn với kho dữ liệu.
+
+Pipeline dùng cửa sổ overlap mặc định 5 phút để hạn chế bỏ sót dữ liệu commit
+trễ. Vì load là idempotent nên các dòng trong vùng overlap có thể được nạp lại
+an toàn.
+
+## Cấu trúc dự án
 
 ```text
-backend/            FastAPI: main.py, models.py, schemas.py, security.py, tests/
-database_scripts/   01_init_schema.sql (bảng, index, trigger), 02_seed_reference_data.sql (danh mục)
-data_pipeline/      generate_seed.py, validate_seed.py (dữ liệu giả + kiểm tra nhất quán)
-                    etl/ (dwh_schema, extract, transform, load, pipeline), run_etl.py
-                    analytics/*.sql, run_analytics.py, tests/
-docs/               api_contract.md, erd.dbml (OLTP), dwh_star_schema.dbml (DWH) - dán vào dbdiagram.io
-.env.example        mẫu cấu hình (copy thành .env)
+cho-troi-uit/
+├── backend/
+│   ├── main.py                 # FastAPI routes
+│   ├── database.py             # SQLAlchemy engine và DB dependency
+│   ├── models.py               # ORM models
+│   ├── schemas.py              # Pydantic request/response schemas
+│   ├── security.py             # bcrypt, JWT và auth dependency
+│   ├── requirements.txt
+│   └── tests/
+├── data_pipeline/
+│   ├── generate_seed.py         # sinh dữ liệu phát triển
+│   ├── validate_seed.py         # kiểm tra dữ liệu nguồn
+│   ├── run_etl.py               # entry point ETL
+│   ├── run_analytics.py         # chạy truy vấn phân tích
+│   ├── etl/
+│   │   ├── extract.py
+│   │   ├── transform.py
+│   │   ├── load.py
+│   │   ├── pipeline.py
+│   │   └── dwh_schema.py
+│   ├── analytics/
+│   └── tests/
+├── database_scripts/
+│   ├── 01_init_schema.sql       # reset và tạo schema OLTP
+│   └── 02_seed_reference_data.sql
+├── docs/
+│   ├── api_contract.md
+│   ├── erd.dbml
+│   └── dwh_star_schema.dbml
+├── .env.example
+└── README.md
 ```
 
-## 🚀 Chạy dự án
+## Công nghệ
 
-**Yêu cầu:** Python 3.12, SQL Server (Express được) và [ODBC Driver 18 for SQL Server](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server).
+- Python 3.12+
+- FastAPI, Pydantic và Uvicorn
+- SQLAlchemy
+- SQL Server và `pyodbc`
+- bcrypt và PyJWT
+- Pandas và NumPy
+- Pytest
+- SQL analytics sử dụng CTE và window functions
 
-```bash
-# 1. Tạo database và schema (SSMS / Azure Data Studio, hoặc sqlcmd)
-#    CREATE DATABASE ChoTroUIT;
-sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts/01_init_schema.sql   # ⚠️ XOÁ & tạo lại bảng
-sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts/02_seed_reference_data.sql
+## Yêu cầu hệ thống
 
-# 2. Cấu hình: copy .env.example -> .env (thư mục gốc) rồi điền DATABASE_URL và JWT_SECRET
+- Python 3.12 trở lên
+- SQL Server 2016 trở lên hoặc SQL Server Express
+- ODBC Driver 18 for SQL Server
+- Git
 
-# 3. Cài thư viện (Windows: .venv\Scripts\activate)
-python -m venv .venv && source .venv/bin/activate
-pip install -r backend/requirements.txt -r data_pipeline/requirements.txt
+## Cài đặt
 
-# 4. Chạy API  ->  http://localhost:8000/docs
-cd backend && uvicorn main:app --reload
+Từ thư mục gốc repository:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r backend\requirements.txt -r data_pipeline\requirements.txt
+pip install -r backend\requirements-dev.txt -r data_pipeline\requirements-dev.txt
 ```
 
-### Sinh dữ liệu giả (từ thư mục gốc repo)
+Tạo hai database riêng:
 
-```bash
-python data_pipeline/generate_seed.py --reset      # mặc định: 10.000 user / 50.000 sản phẩm / 20.000 giao dịch
-python data_pipeline/validate_seed.py              # kiểm tra nhất quán (thoát mã 1 nếu có vi phạm)
+```sql
+CREATE DATABASE ChoTroUIT;
+CREATE DATABASE ChoTroUIT_DWH;
 ```
-Tuỳ chọn: `--users --products --transactions --seed --end-date`. Cùng `--seed` luôn cho cùng dữ liệu.
-Mọi tài khoản giả dùng chung mật khẩu `Password123!` (chỉ dùng khi phát triển).
-Dữ liệu có tính mùa vụ (giáo trình đăng/bán nhiều đầu học kỳ) để các truy vấn phân tích có kết quả có ý nghĩa.
 
-## 🔄 Data Pipeline (OLTP → Data Warehouse)
+Chạy schema OLTP bằng SSMS, Azure Data Studio hoặc `sqlcmd`:
 
-**Luồng đi của dữ liệu:** Web/API → **OLTP** (SQL Server `ChoTroUIT`) → **ETL** (`run_etl.py`) → **Data Warehouse** (database riêng `ChoTroUIT_DWH`) → **SQL phân tích**.
+```powershell
+sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts\01_init_schema.sql
+sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts\02_seed_reference_data.sql
+```
+
+`01_init_schema.sql` có thao tác xóa và tạo lại toàn bộ bảng, chỉ nên dùng cho
+môi trường phát triển.
+
+## Cấu hình môi trường
+
+Sao chép `.env.example` thành `.env` ở thư mục gốc và điền các giá trị phù hợp:
+
+```dotenv
+DATABASE_URL=mssql+pyodbc://@localhost/ChoTroUIT?driver=ODBC+Driver+18+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes
+DWH_DATABASE_URL=mssql+pyodbc://@localhost/ChoTroUIT_DWH?driver=ODBC+Driver+18+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes
+JWT_SECRET=thay-bang-chuoi-ngau-nhien-it-nhat-32-ky-tu
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+```
+
+Tạo secret:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Không commit `.env`. File này đã nằm trong `.gitignore`.
+
+## Chạy backend
+
+```powershell
+Set-Location backend
+..\.venv\Scripts\Activate.ps1
+uvicorn main:app --reload
+```
+
+Nếu dùng virtual environment riêng trong `backend\env`:
+
+```powershell
+.\env\Scripts\Activate.ps1
+uvicorn main:app --reload
+```
+
+Các địa chỉ hữu ích:
+
+- Health check: `http://localhost:8000/`
+- Swagger UI: `http://localhost:8000/docs`
+- OpenAPI JSON: `http://localhost:8000/openapi.json`
+
+## Sinh và kiểm tra dữ liệu
+
+Từ thư mục gốc, sau khi cấu hình `DATABASE_URL`:
+
+```powershell
+python data_pipeline\generate_seed.py --reset
+python data_pipeline\validate_seed.py
+```
+
+Mặc định generator tạo dữ liệu phát triển quy mô lớn. Có thể tùy chỉnh:
+
+```powershell
+python data_pipeline\generate_seed.py --users 300 --products 1200 --transactions 500 --seed 42
+```
+
+Các tài khoản seed dùng mật khẩu `Password123!`; chỉ sử dụng trong môi trường
+phát triển.
+
+## Chạy ETL và analytics
+
+### ETL
+
+```powershell
+python data_pipeline\run_etl.py
+```
+
+Các chế độ:
+
+```powershell
+python data_pipeline\run_etl.py --full-refresh
+python data_pipeline\run_etl.py --drop-dwh
+python data_pipeline\run_etl.py --overlap-minutes 5
+```
+
+- `0`: chạy thành công.
+- `1`: chạy xong nhưng có cảnh báo hoặc dòng bị từ chối.
+- `2`: cấu hình hoặc tham số không hợp lệ.
+- `3`: ETL thất bại.
+
+`--drop-dwh` xóa toàn bộ bảng Data Warehouse, chỉ dùng khi muốn dựng lại kho
+từ đầu.
+
+### Analytics
+
+```powershell
+python data_pipeline\run_analytics.py --list
+python data_pipeline\run_analytics.py
+python data_pipeline\run_analytics.py top3_majors_it books_peak_month
+```
+
+Các báo cáo hiện có:
+
+| Truy vấn | Mục đích |
+|---|---|
+| `top3_majors_it` | Top 3 ngành mua thiết bị IT |
+| `books_peak_month` | Tháng cao điểm của giao dịch giáo trình |
+| `days_to_sell_by_category` | Thời gian bán và mức giảm giá theo danh mục |
+| `seller_pareto` | Tỷ trọng doanh thu lũy kế của người bán |
+
+## API chính
+
+Chi tiết request/response nằm trong [`docs/api_contract.md`](docs/api_contract.md).
+
+| Method | Endpoint | Mô tả | Auth |
+|---|---|---|---|
+| `GET` | `/` | Health check | Không |
+| `POST` | `/api/auth/register` | Đăng ký tài khoản UIT | Không |
+| `POST` | `/api/auth/login` | Đăng nhập và nhận JWT | Không |
+| `GET` | `/api/users/me` | Thông tin tài khoản hiện tại | Có |
+| `GET` | `/api/categories` | Danh sách danh mục | Không |
+| `GET` | `/api/products` | Tìm kiếm và phân trang sản phẩm | Không |
+| `GET` | `/api/products/{product_id}` | Xem chi tiết sản phẩm | Không |
+| `POST` | `/api/products` | Đăng sản phẩm | Có |
+| `POST` | `/api/transactions` | Đặt mua sản phẩm | Có |
+
+Quy tắc nghiệp vụ chính:
+
+- Email phải thuộc miền `@gm.uit.edu.vn`.
+- MSSV gồm 8 chữ số và phải khớp phần trước `@` của email.
+- Người dùng không thể mua sản phẩm của chính mình.
+- Giá chốt không được cao hơn giá niêm yết.
+- Sản phẩm chỉ có thể được mua một lần.
+- Sản phẩm `Hidden` không xuất hiện trong API công khai.
+
+## Thiết kế dữ liệu
+
+### OLTP
 
 ```mermaid
 erDiagram
-    fact_transactions }o--|| dim_product : "product_key"
-    fact_transactions }o--|| dim_user : "buyer_user_key (người mua)"
-    fact_transactions }o--|| dim_user : "seller_user_key (người bán)"
-    fact_transactions }o--|| dim_date : "transaction_date_key / listed_date_key"
+    USERS ||--o{ PRODUCTS : sells
+    CATEGORIES ||--o{ PRODUCTS : contains
+    USERS ||--o{ TRANSACTIONS : buys
+    PRODUCTS ||--o| TRANSACTIONS : has
 ```
 
-| Bước | Làm gì | Chi tiết |
-|---|---|---|
-| **Extract** | Chỉ lấy dòng thay đổi | `WHERE updated_at > watermark − 5 phút`. Lấy **giao dịch trước, rồi mới user/sản phẩm** để không có giao dịch "mồ côi" khi đăng bán xảy ra giữa hai lần đọc |
-| **Transform** (Pandas) | Làm sạch & tính cột phái sinh | Chuẩn hoá ngành (`KHMT` → `Khoa học máy tính`), NULL → `Chưa xác định`, `cohort_year` từ MSSV, `discount_pct`, `days_to_sell` (chỉ giao dịch Completed), khoá ngày `YYYYMMDD` |
-| **Data quality** | Cách ly dòng xấu | Sản phẩm không tồn tại, giá chốt > niêm yết, mua trước khi đăng, người mua = người bán... → ghi vào `etl_rejected_rows`, **không** nạp vào fact |
-| **Load** | Upsert vào Star Schema | Dimension rồi mới tới fact, **một transaction duy nhất** (lỗi giữa chừng = không có gì thay đổi, watermark không tiến) |
-| **Reconcile** | Đối chiếu số dòng nguồn ↔ kho | Lệch thì trạng thái chạy là `WARNING` (mã thoát 1) |
+Các bảng chính:
 
-**Quyết định thiết kế:**
-- **Watermark + cửa sổ chồng lấn 5 phút:** `updated_at` có thể commit trễ hoặc lệch đồng hồ giữa app và DB. Lùi 5 phút rồi **upsert idempotent** nên nạp trùng không gây lỗi (có test chứng minh).
-- **Tiêu chí kiểm chứng chính:** kết quả nạp tăng dần phải **giống hệt** nạp lại từ đầu (`test_incremental_result_equals_full_reload`).
-- **Dimension là SCD loại 1** (ghi đè, không giữ lịch sử): `dim_product.current_status` là trạng thái *hiện tại*. Muốn xem lịch sử thay đổi cần nâng lên SCD loại 2.
-- **Không đưa email / MSSV / mật khẩu vào kho** (tối thiểu hoá dữ liệu cá nhân); `dim_user` chỉ có `cohort_year`, tên, ngành.
-- `dim_user` dùng cho cả người mua lẫn người bán (role-playing dimension). Danh mục được gộp vào `dim_product` (star, không snowflake).
-- `academic_term` (HK1 = T9–T1, HK2 = T2–T6, Hè = T7–T8) là **lịch giả định**, chỉnh ở `etl/transform.py`.
-- Mỗi lần chạy được ghi vào `etl_run_log` (kể cả lần lỗi).
+- `users`: tài khoản và thông tin sinh viên.
+- `categories`: danh mục sản phẩm.
+- `products`: tin đăng và trạng thái `Available`, `Sold`, `Hidden`.
+- `transactions`: giao dịch với trạng thái `Pending`, `Completed`, `Cancelled`.
 
-### Chạy ETL
+### Data Warehouse
 
-```bash
-# 1. Tạo database kho (một lần), rồi thêm DWH_DATABASE_URL vào .env (xem .env.example)
-#    CREATE DATABASE ChoTroUIT_DWH;
-# 2. Chạy ETL: tự tạo bảng + dim_date; lần đầu nạp toàn bộ, các lần sau chỉ nạp phần thay đổi
-python data_pipeline/run_etl.py
-python data_pipeline/run_etl.py --full-refresh     # nạp lại toàn bộ (vẫn là upsert)
-python data_pipeline/run_etl.py --drop-dwh         # ⚠️ XOÁ mọi bảng DWH rồi nạp lại từ đầu
+Star Schema gồm:
+
+- `dim_user`: người mua/người bán, dùng role-playing dimension.
+- `dim_product`: sản phẩm và danh mục.
+- `dim_date`: lịch ngày, học kỳ và thuộc tính thời gian.
+- `fact_transactions`: số đo giao dịch, giá niêm yết, giá chốt, chiết khấu và
+  thời gian bán.
+- `etl_watermark`, `etl_run_log`, `etl_rejected_rows`: điều khiển và audit ETL.
+
+Dimension hiện sử dụng SCD Type 1. Email, MSSV và password hash không được đưa
+vào Data Warehouse để giảm dữ liệu định danh không cần thiết.
+
+Sơ đồ chi tiết:
+
+- [OLTP ERD](docs/erd.dbml)
+- [DWH Star Schema](docs/dwh_star_schema.dbml)
+
+## Kiểm thử
+
+Backend:
+
+```powershell
+Set-Location backend
+pytest
 ```
-Mã thoát: `0` OK · `1` có cảnh báo (dòng bị từ chối / lệch số dòng) · `2` cấu hình sai · `3` lỗi. Hiện tại mỗi lần chạy đọc toàn bộ phần thay đổi vào bộ nhớ — phù hợp quy mô chục nghìn dòng; dữ liệu lớn hơn cần đọc theo lô.
 
-### Phân tích trên Data Warehouse
+Data pipeline:
 
-```bash
-python data_pipeline/run_analytics.py              # chạy cả 4 truy vấn trong data_pipeline/analytics/
-python data_pipeline/run_analytics.py top3_majors_it books_peak_month
+```powershell
+Set-Location data_pipeline
+pytest
 ```
-| Truy vấn | Câu hỏi |
-|---|---|
-| `top3_majors_it` | Top 3 ngành mua thiết bị IT (danh mục *Linh kiện IT* + *Bàn phím & Chuột*) nhiều nhất? |
-| `books_peak_month` | Tháng nào giao dịch giáo trình cao điểm nhất? (kèm so sánh với tháng trước) |
-| `days_to_sell_by_category` | Danh mục nào bán nhanh nhất, người mua mặc cả bao nhiêu %? |
-| `seller_pareto` | 10 người bán hàng đầu chiếm bao nhiêu % doanh thu (cộng dồn)? |
 
-Dữ liệu seed hiện cho người bán được chọn **đồng đều**, nên `seller_pareto` ra phân phối khá phẳng (khác thực tế, nơi vài người bán chiếm phần lớn doanh thu). Tháng đầu và tháng cuối của dữ liệu có thể chưa đủ ngày.
+Test bao phủ:
 
-## 🧪 Kiểm thử
+- đăng ký, đăng nhập và JWT;
+- validate sản phẩm và phân trang;
+- chống mua trùng trong transaction;
+- model constraints;
+- transform và chuẩn hóa dữ liệu;
+- ETL initial, incremental, full refresh và idempotency;
+- watermark, overlap window và quarantine dòng lỗi;
+- kiểm tra các truy vấn analytics.
 
-```bash
-pip install -r backend/requirements-dev.txt -r data_pipeline/requirements-dev.txt
-cd backend && pytest            # API + ràng buộc model, chạy trên SQLite in-memory
-cd ../data_pipeline && pytest   # generator, ETL, truy vấn phân tích (chạy trên SQLite)
+Test tự động hiện chạy trên SQLite để không yêu cầu SQL Server. Vì vậy cần
+kiểm thử bổ sung trên SQL Server thật cho filtered unique index, trigger
+`updated_at`, driver ODBC và tương thích dialect.
+
+## Bảo mật và toàn vẹn dữ liệu
+
+- Mật khẩu chỉ được lưu dưới dạng bcrypt hash.
+- JWT secret và connection strings chỉ nằm trong `.env`.
+- API không nhận `seller_id` hoặc `buyer_id` từ client; các giá trị này lấy từ
+  token.
+- SQL Server dùng foreign key, CHECK constraint và unique constraint.
+- Cập nhật `Available → Sold` dùng điều kiện nguyên tử.
+- Filtered unique index giới hạn một giao dịch chưa hủy trên mỗi sản phẩm.
+- Dữ liệu lỗi trong ETL được ghi vào `etl_rejected_rows`, không âm thầm nạp vào
+  fact.
+
+## Lộ trình phát triển
+
+- [ ] Xây dựng frontend.
+- [ ] Chạy kiểm thử tích hợp trên SQL Server thật.
+- [ ] Thêm Docker Compose cho OLTP, DWH, API và ETL.
+- [ ] Lập lịch chạy ETL tự động.
+- [ ] Bổ sung phân quyền và quản lý tin đăng.
+- [ ] Nâng dimension cần thiết lên SCD Type 2 để lưu lịch sử.
+- [ ] Thêm CI chạy test và kiểm tra chất lượng code.
+
+## Quy trình Git đề xuất
+
+```text
+main (ổn định)
+└── dev (tích hợp)
+    ├── feat/<ten-tinh-nang>
+    ├── fix/<ten-loi>
+    └── docs/<ten-tai-lieu>
 ```
-Test chạy trên SQLite nên **không** kiểm tra được filtered unique index và trigger của SQL Server — hãy kiểm tra các phần đó thủ công sau khi chạy `01_init_schema.sql`.
 
-## 🔐 Quy tắc bảo mật đang áp dụng
+## Tác giả
 
-- Chỉ email `@gm.uit.edu.vn` (kiểm ở client, API **và** CHECK constraint trong DB); MSSV phải trùng phần trước `@`.
-- Mật khẩu băm bằng bcrypt; thông báo đăng nhập sai không tiết lộ email nào đã đăng ký.
-- `seller_id`/`buyer_id` lấy từ JWT, không nhận từ client. Bí mật nằm trong `.env` (đã `.gitignore`).
-- Mua hàng dùng `UPDATE ... WHERE status='Available'` nguyên tử + unique index để 2 người không mua trùng một món.
-
-## 🌿 Quy trình Git
-
-`main` (ổn định) ← `dev` (tích hợp) ← `feat/…`, `fix/…`, `docs/…`.
+**Hà Văn Nghiệp** — [Nghiepcoder17v](https://github.com/Nghiepcoder17v)
