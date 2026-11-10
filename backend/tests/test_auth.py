@@ -93,4 +93,6 @@ def test_seller_reputation_does_not_return_synthetic_rating(client):
     data = response.json()["data"]
     assert data["score"] is None
     assert data["completed_sales"] == 0
-    assert data["label"] == "Chưa có đánh giá thật"
+    assert data["label"] == "Chưa có đánh giá"
+    assert data["review_count"] == 0
+    assert data["rating_distribution"] == {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}

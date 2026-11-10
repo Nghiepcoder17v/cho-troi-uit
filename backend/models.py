@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    UniqueConstraint,
     Unicode,
     UnicodeText,
 )
@@ -96,3 +97,31 @@ class Transaction(Base):
 
     product = relationship("Product")
     buyer = relationship("User")
+
+
+
+class Review(Base):
+    """Đánh giá hai chiều giữa buyer và seller sau một giao dịch hoàn tất."""
+
+    __tablename__ = "reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "transaction_id", "reviewer_id", name="UQ_Reviews_Transaction_Reviewer"
+        ),
+        CheckConstraint("rating >= 1 AND rating <= 5", name="CHK_Review_Rating"),
+    )
+
+    review_id = Column(Integer, primary_key=True, autoincrement=True)
+    transaction_id = Column(
+        Integer, ForeignKey("transactions.transaction_id"), nullable=False
+    )
+    reviewer_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    reviewee_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    rating = Column(Integer, nullable=False)
+    comment = Column(Unicode(1000), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    transaction = relationship("Transaction")
+    reviewer = relationship("User", foreign_keys=[reviewer_id])
+    reviewee = relationship("User", foreign_keys=[reviewee_id])

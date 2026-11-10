@@ -13,7 +13,8 @@ Tài liệu này quy định các cổng giao tiếp giữa Frontend và Backend
 |----|---------|
 | 400 | Vi phạm quy tắc nghiệp vụ (tự mua hàng của mình, giá đề nghị > giá niêm yết...) |
 | 401 | Thiếu / sai / hết hạn token, hoặc sai email/mật khẩu |
-| 404 | Không tìm thấy (sản phẩm, danh mục). Sản phẩm `Hidden` cũng trả 404 |
+| 403 | Người dùng không có quyền thực hiện hành động (ví dụ không tham gia giao dịch, sửa review của người khác) |
+| 404 | Không tìm thấy (sản phẩm, danh mục, người dùng, review). Sản phẩm `Hidden` cũng trả 404 |
 | 409 | Xung đột (email/MSSV đã đăng ký; sản phẩm đã bán) |
 | 422 | Dữ liệu gửi lên không hợp lệ |
 
@@ -54,10 +55,27 @@ Lỗi: `401` (sai email hoặc mật khẩu — cùng một thông báo cho cả
 ### Thông tin tài khoản — `GET /api/users/me` 🔒
 Trả về `{"status": "success", "data": { ...như phần data khi đăng ký... }}`.
 
-### Điểm uy tín người bán — `GET /api/users/{user_id}/reputation`
-Hiện trả về số giao dịch hoàn tất và tổng số giao dịch. `score` là `null` và nhãn
-là `Chưa có đánh giá thật`; không hiển thị điểm uy tín tự sinh. Review thật sẽ
-được bổ sung ở Step 5 và chỉ áp dụng cho giao dịch `Completed`.
+### Điểm uy tín — `GET /api/users/{user_id}/reputation`
+Điểm là trung bình cộng của các đánh giá thật mà người dùng nhận được, làm tròn
+một chữ số thập phân. Khi chưa có đánh giá, `score` là `null`,
+`review_count` bằng 0 và nhãn là `Chưa có đánh giá`. `rating_distribution`
+luôn có số lượng cho từng mức 1–5. Các trường `completed_sales` và
+`total_sales` tiếp tục phản ánh lịch sử bán hàng của người dùng.
+
+### Danh sách đánh giá nhận được — `GET /api/users/{user_id}/reviews`
+Endpoint công khai, trả về đánh giá thật theo thời gian mới nhất trước; mỗi
+mục gồm người đánh giá, sản phẩm, điểm, bình luận và thời điểm tạo/cập nhật.
+
+### Gửi đánh giá — `POST /api/transactions/{transaction_id}/reviews` 🔒
+Chỉ buyer hoặc seller của giao dịch `Completed` được đánh giá người còn lại.
+Mỗi bên chỉ có một đánh giá trên mỗi giao dịch. Client chỉ gửi `rating` từ 1
+đến 5 và `comment` tùy chọn tối đa 1000 ký tự; danh tính hai bên được lấy từ
+JWT và giao dịch, không nhận từ client.
+
+### Sửa đánh giá — `PATCH /api/reviews/{review_id}` 🔒
+Chỉ tác giả được sửa đánh giá của mình. Có thể cập nhật `rating`, `comment`
+hoặc cả hai; gửi `comment: null` để xóa nội dung bình luận. Không có API xóa
+đánh giá trong Step 5.
 
 ---
 
@@ -154,9 +172,14 @@ Chỉ khi cả hai bên xác nhận, giao dịch mới thành `Completed` và s�
 Trả về các giao dịch buyer/seller tham gia, trạng thái, thông tin hai bên và
 hai timestamp xác nhận.
 
+Trường `my_review` trong lịch sử mua/bán trả về đánh giá do tài khoản hiện
+tại viết cho giao dịch đó, hoặc `null` nếu chưa đánh giá.
+
 Trạng thái nghiệp vụ:
 
 - Transaction: `Pending → Accepted → Completed`, hoặc `Pending/Accepted → Cancelled`.
 - Product: `Available → Reserved → Sold`; từ `Reserved` về `Available` khi
   seller từ chối hoặc một bên hủy.
-- Chỉ giao dịch `Completed` mới đủ điều kiện đánh giá ở Step 5.
+- Chỉ giao dịch `Completed` mới đủ điều kiện đánh giá. Các giao dịch
+  `Completed` có từ trước Step 5 cũng được đánh giá; timestamp xác nhận cũ
+  không bắt buộc phải có.

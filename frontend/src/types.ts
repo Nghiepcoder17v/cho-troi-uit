@@ -11,9 +11,27 @@ export interface Seller {
 export interface SellerReputation {
   user_id: number;
   score: number | null;
+  review_count: number;
+  rating_distribution: Record<"1" | "2" | "3" | "4" | "5", number>;
   completed_sales: number;
   total_sales: number;
   label: string;
+}
+
+export interface ReviewMine {
+  review_id: number;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Review extends ReviewMine {
+  transaction_id: number;
+  reviewer_id: number;
+  reviewee_id: number;
+  reviewer: Seller;
+  product_title: string;
 }
 
 export interface Product {
@@ -51,6 +69,7 @@ export interface TransactionHistory {
   product_title: string;
   buyer: Seller;
   seller: Seller;
+  my_review: ReviewMine | null;
 }
 
 export interface User {

@@ -1721,3 +1721,219 @@ footer span:first-child {
   .order-card-heading { align-items: flex-start; flex-wrap: wrap; }
   .order-card-heading .status-pill { margin-left: 48px; }
 }
+
+
+/* Step 5 — verified two-way reviews */
+.detail-modal {
+  max-height: min(90vh, 900px);
+  overflow-y: auto;
+}
+
+.review-section,
+.account-reviews {
+  margin-top: 24px;
+}
+
+.review-section-heading,
+.review-item-heading,
+.review-form-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.review-section-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.review-section-heading small,
+.review-product,
+.review-form-heading .muted {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.review-score {
+  color: var(--color-accent-text);
+  white-space: nowrap;
+}
+
+.review-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.review-item,
+.review-own-summary {
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+}
+
+.review-item p,
+.review-own-summary p {
+  margin: 8px 0 0;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.review-stars {
+  color: var(--color-warning-text);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.review-product {
+  display: block;
+  margin-top: 5px;
+}
+
+.review-empty {
+  margin: 12px 0 0;
+}
+
+.review-editor {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.review-own-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.review-own-summary > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-form {
+  display: grid;
+  gap: 12px;
+}
+
+.review-form-heading {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.review-rating-input {
+  display: flex;
+  gap: 4px;
+}
+
+.review-rating-input button {
+  border: 0;
+  background: transparent;
+  color: var(--color-warning-text);
+  font-size: 1.7rem;
+  cursor: pointer;
+  padding: 2px 5px;
+}
+
+.review-comment-label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-text);
+}
+
+.review-comment-label textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+
+.review-comment-label small {
+  color: var(--color-muted);
+  justify-self: end;
+}
+
+.review-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.account-reviews {
+  padding: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.rating-distribution {
+  display: grid;
+  gap: 7px;
+  max-width: 420px;
+  margin-top: 20px;
+}
+
+.rating-row {
+  display: grid;
+  grid-template-columns: 48px 1fr 30px;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.rating-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--color-surface-soft);
+}
+
+.rating-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+}
+
+.rating-row small {
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .account-reviews {
+    padding: 16px;
+  }
+
+  .review-item-heading,
+  .review-own-summary > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+
+/* Four account metrics on wide screens, with room to wrap on smaller displays. */
+.account-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .account-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .account-stats {
+    grid-template-columns: 1fr;
+  }
+}

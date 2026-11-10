@@ -3,6 +3,8 @@ import type {
   Condition,
   Pagination,
   Product,
+  Review,
+  ReviewMine,
   SellerReputation,
   TransactionHistory,
   User,
@@ -120,4 +122,28 @@ export async function getSales(): Promise<TransactionHistory[]> {
 
 export async function getSellerReputation(userId: number): Promise<SellerReputation> {
   return (await request<Envelope<SellerReputation>>(`/api/users/${userId}/reputation`)).data;
+}
+
+export async function getUserReviews(userId: number): Promise<Review[]> {
+  return (await request<Envelope<Review[]>>(`/api/users/${userId}/reviews`)).data;
+}
+
+export async function createTransactionReview(
+  transactionId: number,
+  body: { rating: number; comment?: string | null },
+): Promise<ReviewMine> {
+  return (await request<Envelope<ReviewMine>>(`/api/transactions/${transactionId}/reviews`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })).data;
+}
+
+export async function updateReview(
+  reviewId: number,
+  body: { rating?: number; comment?: string | null },
+): Promise<ReviewMine> {
+  return (await request<Envelope<ReviewMine>>(`/api/reviews/${reviewId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })).data;
 }

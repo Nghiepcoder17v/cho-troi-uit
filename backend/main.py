@@ -210,6 +210,46 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     return {"status": "success", "data": product}
 
 
+@app.get("/api/users/{user_id}/reviews", response_model=schemas.ReviewListEnvelope)
+def list_user_reviews(user_id: int, db: Session = Depends(get_db)):
+    if db.get(models.User, user_id) is None:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+
+    rows = db.execute(
+        select(models.Review, models.User, models.Product)
+        .join(models.User, models.Review.reviewer_id == models.User.user_id)
+        .join(
+            models.Transaction,
+            models.Review.transaction_id == models.Transaction.transaction_id,
+        )
+        .join(models.Product, models.Transaction.product_id == models.Product.product_id)
+        .where(
+            models.Review.reviewee_id == user_id,
+            models.Transaction.status == "Completed",
+        )
+        .order_by(models.Review.created_at.desc(), models.Review.review_id.desc())
+    ).all()
+    data = [
+        {
+            "review_id": review.review_id,
+            "transaction_id": review.transaction_id,
+            "reviewer_id": review.reviewer_id,
+            "reviewee_id": review.reviewee_id,
+            "rating": review.rating,
+            "comment": review.comment,
+            "created_at": review.created_at,
+            "updated_at": review.updated_at,
+            "reviewer": {
+                "user_id": reviewer.user_id,
+                "full_name": reviewer.full_name,
+            },
+            "product_title": product.title,
+        }
+        for review, reviewer, product in rows
+    ]
+    return {"status": "success", "data": data}
+
+
 @app.get("/api/users/{user_id}/reputation", response_model=schemas.SellerReputationEnvelope)
 def get_seller_reputation(user_id: int, db: Session = Depends(get_db)):
     if db.get(models.User, user_id) is None:
@@ -228,14 +268,55 @@ def get_seller_reputation(user_id: int, db: Session = Depends(get_db)):
             models.Transaction.status == "Completed",
         )
     ) or 0
-    # Không tự tạo điểm uy tín giả. Hệ thống đánh giá thật sẽ được bổ sung ở Step 5.
-    score = None
-    label = "Chưa có đánh giá thật"
+    review_count = db.scalar(
+        select(func.count(models.Review.review_id))
+        .join(
+            models.Transaction,
+            models.Review.transaction_id == models.Transaction.transaction_id,
+        )
+        .where(
+            models.Review.reviewee_id == user_id,
+            models.Transaction.status == "Completed",
+        )
+    ) or 0
+    average_rating = db.scalar(
+        select(func.avg(models.Review.rating))
+        .join(
+            models.Transaction,
+            models.Review.transaction_id == models.Transaction.transaction_id,
+        )
+        .where(
+            models.Review.reviewee_id == user_id,
+            models.Transaction.status == "Completed",
+        )
+    )
+    score = round(float(average_rating), 1) if average_rating is not None else None
+    distribution = {str(rating): 0 for rating in range(1, 6)}
+    for rating, count in db.execute(
+        select(models.Review.rating, func.count(models.Review.review_id))
+        .join(
+            models.Transaction,
+            models.Review.transaction_id == models.Transaction.transaction_id,
+        )
+        .where(
+            models.Review.reviewee_id == user_id,
+            models.Transaction.status == "Completed",
+        )
+        .group_by(models.Review.rating)
+    ).all():
+        distribution[str(rating)] = int(count)
+    label = (
+        "Chưa có đánh giá"
+        if score is None
+        else f"{score:.1f}/5 từ {review_count} đánh giá"
+    )
     return {
         "status": "success",
         "data": {
             "user_id": user_id,
             "score": score,
+            "review_count": review_count,
+            "rating_distribution": distribution,
             "completed_sales": completed_sales,
             "total_sales": total_sales,
             "label": label,
@@ -529,6 +610,87 @@ def confirm_transaction_completion(
     return {"status": "success", "message": message, "data": transaction}
 
 
+@app.post(
+    "/api/transactions/{transaction_id}/reviews",
+    response_model=schemas.ReviewEnvelope,
+    status_code=201,
+)
+def create_transaction_review(
+    transaction_id: int,
+    body: schemas.ReviewCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    transaction, product = _get_transaction_context(db, transaction_id)
+    is_buyer = transaction.buyer_id == current_user.user_id
+    is_seller = product.seller_id == current_user.user_id
+    if not (is_buyer or is_seller):
+        raise HTTPException(status_code=403, detail="Bạn không tham gia giao dịch này")
+    if transaction.status != "Completed":
+        raise HTTPException(status_code=409, detail="Chỉ giao dịch Completed mới được đánh giá")
+
+    reviewee_id = product.seller_id if is_buyer else transaction.buyer_id
+    if reviewee_id == current_user.user_id:
+        raise HTTPException(status_code=400, detail="Bạn không thể tự đánh giá chính mình")
+
+    existing = db.scalar(
+        select(models.Review.review_id).where(
+            models.Review.transaction_id == transaction_id,
+            models.Review.reviewer_id == current_user.user_id,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Bạn đã đánh giá giao dịch này. Hãy chỉnh sửa đánh giá hiện có.",
+        )
+
+    review = models.Review(
+        transaction_id=transaction_id,
+        reviewer_id=current_user.user_id,
+        reviewee_id=reviewee_id,
+        rating=body.rating,
+        comment=body.comment,
+    )
+    db.add(review)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Bạn đã đánh giá giao dịch này")
+    db.refresh(review)
+    return {
+        "status": "success",
+        "message": "Đã gửi đánh giá.",
+        "data": review,
+    }
+
+
+@app.patch("/api/reviews/{review_id}", response_model=schemas.ReviewEnvelope)
+def update_review(
+    review_id: int,
+    body: schemas.ReviewUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    review = db.get(models.Review, review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Đánh giá không tồn tại")
+    if review.reviewer_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Bạn chỉ có thể chỉnh sửa đánh giá của chính mình")
+
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(review, field, value)
+    review.updated_at = models.utcnow()
+    db.commit()
+    db.refresh(review)
+    return {
+        "status": "success",
+        "message": "Đã cập nhật đánh giá.",
+        "data": review,
+    }
+
+
 def _transaction_history(
     db: Session,
     user_id: int,
@@ -546,21 +708,48 @@ def _transaction_history(
         .where(user_column == user_id)
         .order_by(models.Transaction.transaction_date.desc(), models.Transaction.transaction_id.desc())
     ).all()
-    return [
-        {
-            "transaction_id": transaction.transaction_id,
-            "product_id": transaction.product_id,
-            "amount": transaction.amount,
-            "status": transaction.status,
-            "transaction_date": transaction.transaction_date,
-            "buyer_confirmed_at": transaction.buyer_confirmed_at,
-            "seller_confirmed_at": transaction.seller_confirmed_at,
-            "product_title": product.title,
-            "buyer": {"user_id": buyer_user.user_id, "full_name": buyer_user.full_name},
-            "seller": {"user_id": seller_user.user_id, "full_name": seller_user.full_name},
-        }
-        for transaction, product, buyer_user, seller_user in rows
-    ]
+    transaction_ids = [transaction.transaction_id for transaction, *_ in rows]
+    reviews = (
+        db.scalars(
+            select(models.Review).where(
+                models.Review.reviewer_id == user_id,
+                models.Review.transaction_id.in_(transaction_ids),
+            )
+        ).all()
+        if transaction_ids
+        else []
+    )
+    reviews_by_transaction = {review.transaction_id: review for review in reviews}
+
+    history = []
+    for transaction, product, buyer_user, seller_user in rows:
+        own_review = reviews_by_transaction.get(transaction.transaction_id)
+        history.append(
+            {
+                "transaction_id": transaction.transaction_id,
+                "product_id": transaction.product_id,
+                "amount": transaction.amount,
+                "status": transaction.status,
+                "transaction_date": transaction.transaction_date,
+                "buyer_confirmed_at": transaction.buyer_confirmed_at,
+                "seller_confirmed_at": transaction.seller_confirmed_at,
+                "product_title": product.title,
+                "buyer": {"user_id": buyer_user.user_id, "full_name": buyer_user.full_name},
+                "seller": {"user_id": seller_user.user_id, "full_name": seller_user.full_name},
+                "my_review": (
+                    {
+                        "review_id": own_review.review_id,
+                        "rating": own_review.rating,
+                        "comment": own_review.comment,
+                        "created_at": own_review.created_at,
+                        "updated_at": own_review.updated_at,
+                    }
+                    if own_review
+                    else None
+                ),
+            }
+        )
+    return history
 
 
 @app.get("/api/transactions/purchases", response_model=schemas.TransactionHistoryListEnvelope)
