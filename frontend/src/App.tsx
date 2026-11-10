@@ -182,7 +182,7 @@ function App() {
     if (submittedIds.length) {
       setNotice(`${submittedIds.length} yêu cầu mua đã được gửi. Sản phẩm đang được giữ chỗ chờ người bán phản hồi.`);
     }
-    if (failures.length) setError(`Một số sản phẩm chưa gửi được yêu cầu:\\n${failures.join("\\n")}`);
+    if (failures.length) setError(`Một số sản phẩm chưa gửi được yêu cầu:\n${failures.join("\n")}`);
     await refreshProducts();
     if (user) await refreshAccount();
   };
