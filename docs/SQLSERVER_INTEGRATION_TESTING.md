@@ -84,10 +84,10 @@ Khi chưa bật `RUN_SQLSERVER_INTEGRATION=1`, các test SQL Server sẽ đượ
 
 ## 5. Phần cần xác nhận thủ công sau khi test tự động
 
-- Xác nhận database hiện tại của dự án đã có migration Step 4 rồi Step 5 theo đúng thứ tự, nếu database được tạo từ schema cũ. Trong lần kiểm thử Step 7, instance SQL Server Express cục bộ không có database `ChoTroUIT` hoặc `ChoTroUIT_DWH`; trạng thái database trên instance khác vẫn chưa được xác nhận.
-- Kiểm tra app kết nối bằng đúng `DATABASE_URL`, không phải `SQLSERVER_TEST_DATABASE_URL`.
-- API smoke test đã chạy trên `ChoTroUIT_Step7_Test` với dữ liệu giả. Kiểm thử UI thủ công cho Account Center vẫn cần thực hiện.
-- Chỉ đánh dấu Step 7 hoàn tất khi có log test, kết quả build và xác nhận schema trên đúng SQL Server target.
+- Database theo cấu hình `DATABASE_URL` là `UIT_Exchange`. Metadata ban đầu cho thấy thiếu hai cột xác nhận và bảng `REVIEWS`; đã tạo backup `COPY_ONLY`, xác minh bằng `RESTORE VERIFYONLY`, rồi chạy migration Step 4 trước Step 5.
+- Sau migration, đã xác nhận `buyer_confirmed_at`, `seller_confirmed_at`, bảng `REVIEWS`, các constraint/index của review và filtered unique index. Ba trigger `updated_at` vẫn bật.
+- Integration test, API smoke test và UI smoke test đều chạy trên `ChoTroUIT_Step7_Test`, không ghi dữ liệu kiểm thử vào `UIT_Exchange`.
+- Step 7 chỉ hoàn tất sau khi có log test, kết quả build và xác nhận schema trên SQL Server target; các điều kiện đó hiện đã được đáp ứng cho môi trường cục bộ đã kiểm tra.
 
 ## Ghi nhận kết quả
 
@@ -98,5 +98,5 @@ Khi chưa bật `RUN_SQLSERVER_INTEGRATION=1`, các test SQL Server sẽ đượ
 | Data pipeline pytest | Passed | 61 passed; gồm initial/incremental/full refresh, idempotency, watermark, reconciliation và analytics |
 | Frontend build | Passed | `npm run build`; TypeScript và Vite production build thành công |
 | SQL Server API smoke test | Passed | 37 kiểm tra qua TestClient trên SQL Server test database; bao gồm auth, profile, privacy, product lifecycle, giao dịch, hủy và review |
-| Account Center UI smoke test | Chưa chạy | Cần kiểm tra thủ công trên giao diện |
-| Trạng thái migration database dự án | Chưa xác nhận | Không thấy `ChoTroUIT`/`ChoTroUIT_DWH` trên instance SQL Server cục bộ đã kiểm tra; không chạy migration |
+| Account Center UI smoke test | Passed | 14 kiểm tra bằng Chrome trên app nối tới `ChoTroUIT_Step7_Test`; gồm hồ sơ, privacy, quản lý tin, giỏ hàng, đơn mua/bán, theme và đổi mật khẩu |
+| Trạng thái migration database dự án | Verified | `UIT_Exchange`: backup COPY_ONLY đã verify; migrations Step 4 rồi Step 5 chạy thành công; metadata sau migration đầy đủ |

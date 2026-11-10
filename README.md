@@ -443,7 +443,7 @@ kiểm thử bổ sung trên SQL Server thật cho filtered unique index, trigge
 - [x] Xây dựng frontend marketplace và luồng yêu cầu mua hai bên.
 - [x] Bổ sung hệ thống review hai chiều, chỉ cho phép sau Completed (Step 5).
 - [x] Tổ chức lại Account Center thành các khu vực riêng và trang cá nhân công khai (Step 6).
-- [ ] Chạy kiểm thử tích hợp trên SQL Server thật ([hướng dẫn Step 7](docs/SQLSERVER_INTEGRATION_TESTING.md)).
+- [x] Hoàn tất kiểm thử tích hợp SQL Server, pipeline, build và smoke test Step 7 ([kết quả](docs/SQLSERVER_INTEGRATION_TESTING.md)).
 - [ ] Thêm Docker Compose cho OLTP, DWH, API và ETL.
 - [ ] Lập lịch chạy ETL tự động.
 - [ ] Bổ sung phân quyền và quản lý tin đăng.
