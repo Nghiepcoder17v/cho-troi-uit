@@ -155,9 +155,11 @@ sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts\02_seed_reference_data.s
 ```
 
 `01_init_schema.sql` có thao tác xóa và tạo lại toàn bộ bảng, chỉ dùng khi dựng
-mới/reset database phát triển. Với database đã có dữ liệu, backup trước rồi chạy
-migration cộng thêm `database_scripts/migrations/20261110_purchase_requests.sql`;
-không chạy file init schema trên database hiện hữu.
+mới/reset database phát triển. Với database đã có dữ liệu, hãy backup trước.
+Nếu database chưa áp dụng Step 4, chạy
+`database_scripts/migrations/20261110_purchase_requests.sql` trước; sau đó
+chạy `database_scripts/migrations/20261110_reviews.sql`. Không chạy file init
+schema trên database hiện hữu.
 
 ## Cấu hình môi trường
 
@@ -394,6 +396,8 @@ pytest
 Test bao phủ:
 
 - đăng ký, đăng nhập và JWT;
+- review hai chiều, phân quyền theo giao dịch, chỉ cho phép sau Completed,
+  sửa review của tác giả và tính điểm trung bình;
 - validate sản phẩm và phân trang;
 - chống mua trùng trong transaction;
 - model constraints;

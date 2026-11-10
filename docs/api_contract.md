@@ -13,7 +13,8 @@ Tài liệu này quy định các cổng giao tiếp giữa Frontend và Backend
 |----|---------|
 | 400 | Vi phạm quy tắc nghiệp vụ (tự mua hàng của mình, giá đề nghị > giá niêm yết...) |
 | 401 | Thiếu / sai / hết hạn token, hoặc sai email/mật khẩu |
-| 404 | Không tìm thấy (sản phẩm, danh mục). Sản phẩm `Hidden` cũng trả 404 |
+| 403 | Người dùng không có quyền thực hiện hành động (ví dụ không tham gia giao dịch, sửa review của người khác) |
+| 404 | Không tìm thấy (sản phẩm, danh mục, người dùng, review). Sản phẩm `Hidden` cũng trả 404 |
 | 409 | Xung đột (email/MSSV đã đăng ký; sản phẩm đã bán) |
 | 422 | Dữ liệu gửi lên không hợp lệ |
 

@@ -223,7 +223,10 @@ def list_user_reviews(user_id: int, db: Session = Depends(get_db)):
             models.Review.transaction_id == models.Transaction.transaction_id,
         )
         .join(models.Product, models.Transaction.product_id == models.Product.product_id)
-        .where(models.Review.reviewee_id == user_id)
+        .where(
+            models.Review.reviewee_id == user_id,
+            models.Transaction.status == "Completed",
+        )
         .order_by(models.Review.created_at.desc(), models.Review.review_id.desc())
     ).all()
     data = [
@@ -266,20 +269,39 @@ def get_seller_reputation(user_id: int, db: Session = Depends(get_db)):
         )
     ) or 0
     review_count = db.scalar(
-        select(func.count(models.Review.review_id)).where(
-            models.Review.reviewee_id == user_id
+        select(func.count(models.Review.review_id))
+        .join(
+            models.Transaction,
+            models.Review.transaction_id == models.Transaction.transaction_id,
+        )
+        .where(
+            models.Review.reviewee_id == user_id,
+            models.Transaction.status == "Completed",
         )
     ) or 0
     average_rating = db.scalar(
-        select(func.avg(models.Review.rating)).where(
-            models.Review.reviewee_id == user_id
+        select(func.avg(models.Review.rating))
+        .join(
+            models.Transaction,
+            models.Review.transaction_id == models.Transaction.transaction_id,
+        )
+        .where(
+            models.Review.reviewee_id == user_id,
+            models.Transaction.status == "Completed",
         )
     )
     score = round(float(average_rating), 1) if average_rating is not None else None
     distribution = {str(rating): 0 for rating in range(1, 6)}
     for rating, count in db.execute(
         select(models.Review.rating, func.count(models.Review.review_id))
-        .where(models.Review.reviewee_id == user_id)
+        .join(
+            models.Transaction,
+            models.Review.transaction_id == models.Transaction.transaction_id,
+        )
+        .where(
+            models.Review.reviewee_id == user_id,
+            models.Transaction.status == "Completed",
+        )
         .group_by(models.Review.rating)
     ).all():
         distribution[str(rating)] = int(count)
