@@ -1659,3 +1659,65 @@ footer span:first-child {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Step 4: marketplace pagination and purchase-request states */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin: 28px 0 8px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.pagination button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  font: inherit;
+  cursor: pointer;
+}
+.pagination button:disabled { opacity: .4; cursor: not-allowed; }
+.order-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  margin: 12px 0;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+}
+.order-card-heading { display: flex; align-items: center; gap: 12px; }
+.order-card-heading > div { display: grid; flex: 1; min-width: 0; gap: 4px; }
+.order-card-heading strong { overflow-wrap: anywhere; }
+.order-card-heading small, .order-meta, .confirmation-progress {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+.status-pill {
+  padding: 5px 9px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.status-pending { color: var(--color-warning); }
+.status-accepted { color: var(--color-info); }
+.status-completed { color: var(--color-success); }
+.status-cancelled { color: var(--color-muted); }
+.order-meta { display: flex; justify-content: space-between; gap: 12px; }
+.confirmation-progress { margin: 0; }
+.order-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.order-actions button { min-height: 36px; padding: 7px 12px; font-size: 11px; }
+.order-actions .muted { font-size: 11px; }
+@media (max-width: 600px) {
+  .pagination { gap: 10px; }
+  .pagination button { padding-inline: 10px; font-size: 11px; }
+  .order-card-heading { align-items: flex-start; flex-wrap: wrap; }
+  .order-card-heading .status-pill { margin-left: 48px; }
+}

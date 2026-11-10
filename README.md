@@ -1,12 +1,12 @@
 # Chợ Trời UIT
 
 Hệ thống mua bán và trao đổi đồ cũ nội bộ dành cho sinh viên UIT (C2C), kết hợp
-backend REST, cơ sở dữ liệu giao dịch và data pipeline phục vụ phân tích hành vi
-giao dịch.
+frontend React, backend REST, cơ sở dữ liệu giao dịch và data pipeline phục vụ
+phân tích hành vi giao dịch.
 
-> Trạng thái hiện tại: backend và data pipeline đã có test tự động trên SQLite.
-> Frontend, Docker Compose, lập lịch ETL và kiểm thử đầy đủ trên SQL Server là
-> các hạng mục tiếp theo.
+> Trạng thái hiện tại: marketplace có luồng yêu cầu mua, giữ chỗ, seller duyệt
+> và xác nhận hoàn tất từ cả buyer lẫn seller. Backend và data pipeline có test
+> tự động trên SQLite; cần kiểm thử bổ sung trên SQL Server thật trước triển khai.
 
 ## Mục lục
 
@@ -40,7 +40,7 @@ Luồng dữ liệu:
 
 ```mermaid
 flowchart LR
-    FE["Frontend (kế hoạch)"] -->|REST + JWT| API["FastAPI Backend"]
+    FE["React + TypeScript Frontend"] -->|REST + JWT| API["FastAPI Backend"]
     API -->|SQLAlchemy| OLTP[("SQL Server OLTP")]
     SEED["generate_seed.py"] --> OLTP
     OLTP -->|Incremental Extract| ETL["Python + Pandas ETL"]
@@ -225,10 +225,11 @@ npm run build
 npm run preview
 ```
 
-MVP hiện có các màn hình: khám phá sản phẩm, lọc theo danh mục, đăng nhập/đăng
-ký, đăng bán, tài khoản, sản phẩm của tôi và lịch sử mua. Thiết kế dùng các
-panel bo tròn, khoảng trắng lớn, màu accent lime/orange/lilac và responsive cho
-mobile.
+Frontend hiện có khám phá sản phẩm với tìm kiếm, lọc danh mục và phân trang;
+đăng nhập/đăng ký; đăng bán; giỏ hàng; chi tiết sản phẩm; hồ sơ và quản lý yêu
+cầu mua/bán. Checkout gửi yêu cầu mua, không thu tiền trong hệ thống. Sản phẩm
+được giữ chỗ đến khi seller chấp nhận/từ chối hoặc một bên hủy. Buyer và seller
+phải xác nhận hoàn tất riêng biệt trước khi giao dịch thành Completed.
 
 ## Sinh và kiểm tra dữ liệu
 
@@ -305,7 +306,11 @@ Chi tiết request/response nằm trong [`docs/api_contract.md`](docs/api_contra
 | `GET` | `/api/products/{product_id}` | Xem chi tiết sản phẩm | Không |
 | `POST` | `/api/products` | Đăng sản phẩm | Có |
 | `PATCH` | `/api/products/{product_id}` | Cập nhật hoặc ẩn sản phẩm của tôi | Có |
-| `POST` | `/api/transactions` | Đặt mua sản phẩm | Có |
+| `POST` | `/api/transactions` | Gửi yêu cầu mua và giữ chỗ | Có |
+| `POST` | `/api/transactions/{id}/accept` | Người bán chấp nhận yêu cầu | Có |
+| `POST` | `/api/transactions/{id}/reject` | Người bán từ chối yêu cầu | Có |
+| `POST` | `/api/transactions/{id}/cancel` | Một bên hủy giao dịch đang mở | Có |
+| `POST` | `/api/transactions/{id}/confirm-completion` | Buyer/seller xác nhận hoàn tất | Có |
 | `GET` | `/api/transactions/purchases` | Lịch sử mua hàng | Có |
 | `GET` | `/api/transactions/sales` | Lịch sử bán hàng | Có |
 
@@ -315,8 +320,13 @@ Quy tắc nghiệp vụ chính:
 - MSSV gồm 8 chữ số và phải khớp phần trước `@` của email.
 - Người dùng không thể mua sản phẩm của chính mình.
 - Giá chốt không được cao hơn giá niêm yết.
-- Sản phẩm chỉ có thể được mua một lần.
+- Tạo yêu cầu mua chỉ giữ chỗ sản phẩm (`Available → Reserved`), chưa coi là giao dịch hoàn tất.
+- Seller phải chấp nhận yêu cầu; seller có thể từ chối để mở bán lại sản phẩm.
+- Buyer và seller xác nhận riêng; chỉ khi cả hai xác nhận, transaction thành `Completed` và product thành `Sold`.
+- Một bên có thể hủy ở trạng thái `Pending` hoặc `Accepted`; sản phẩm trở lại `Available`.
+- Sản phẩm `Reserved` không xuất hiện trong danh sách công khai và không thể chỉnh sửa; chủ sở hữu vẫn xem được trong `/api/products/mine`.
 - Sản phẩm `Hidden` không xuất hiện trong API công khai.
+- Thanh toán và bàn giao diễn ra bên ngoài nền tảng; không tích hợp payment/shipping.
 
 ## Thiết kế dữ liệu
 
@@ -334,8 +344,8 @@ Các bảng chính:
 
 - `users`: tài khoản và thông tin sinh viên.
 - `categories`: danh mục sản phẩm.
-- `products`: tin đăng và trạng thái `Available`, `Sold`, `Hidden`.
-- `transactions`: giao dịch với trạng thái `Pending`, `Completed`, `Cancelled`.
+- `products`: tin đăng và trạng thái `Available`, `Reserved`, `Sold`, `Hidden`.
+- `transactions`: yêu cầu/giao dịch với trạng thái `Pending`, `Accepted`, `Completed`, `Cancelled`; có timestamp xác nhận riêng cho buyer và seller.
 
 ### Data Warehouse
 
@@ -394,14 +404,17 @@ kiểm thử bổ sung trên SQL Server thật cho filtered unique index, trigge
 - API không nhận `seller_id` hoặc `buyer_id` từ client; các giá trị này lấy từ
   token.
 - SQL Server dùng foreign key, CHECK constraint và unique constraint.
-- Cập nhật `Available → Sold` dùng điều kiện nguyên tử.
+- Giữ chỗ `Available → Reserved` dùng điều kiện nguyên tử; chỉ chuyển `Reserved → Sold` sau xác nhận từ hai bên.
 - Filtered unique index giới hạn một giao dịch chưa hủy trên mỗi sản phẩm.
+- Migration cộng thêm ở `database_scripts/migrations/20261110_purchase_requests.sql`; không chạy lại `01_init_schema.sql` trên database hiện hữu.
 - Dữ liệu lỗi trong ETL được ghi vào `etl_rejected_rows`, không âm thầm nạp vào
   fact.
 
 ## Lộ trình phát triển
 
-- [ ] Xây dựng frontend.
+- [x] Xây dựng frontend marketplace và luồng yêu cầu mua hai bên.
+- [ ] Bổ sung hệ thống review thật, chỉ cho phép sau Completed (Step 5).
+- [ ] Tổ chức lại Account Center thành các khu vực riêng (Step 6).
 - [ ] Chạy kiểm thử tích hợp trên SQL Server thật.
 - [ ] Thêm Docker Compose cho OLTP, DWH, API và ETL.
 - [ ] Lập lịch chạy ETL tự động.

@@ -87,7 +87,7 @@ class SellerOut(BaseModel):
 
 class SellerReputationOut(BaseModel):
     user_id: int
-    score: float
+    score: Optional[float] = None
     completed_sales: int
     total_sales: int
     label: str
