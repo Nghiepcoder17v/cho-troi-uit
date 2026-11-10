@@ -50,7 +50,18 @@ The result must remain a usable marketplace, not a gaming launcher or RGB showca
 - Use primary lime for the most important action in a view, not every button.
 - Use cyan sparingly for secondary actions, informational emphasis and small decorative details.
 - Use dark foreground text on lime or cyan filled controls in both themes.
-- Do not use lime or cyan as body text on white or pale surfaces. Use the normal text tokens instead.
+- Do not use raw lime or cyan as body text or essential icon foregrounds on white or pale surfaces. Use contrast-tested derived text tokens instead; reserve the raw brand values for filled surfaces and decorative accents.
+
+**Accessible accent text variants**
+
+| Token | Dark | Light | Usage |
+|---|---|---|---|
+| `--color-accent-text` | `#C7F36B` | `#3D5714` | Emphasized price, selected accent text and icons |
+| `--color-secondary-text` | `#62D7F2` | `#075985` | Secondary links and technology accents |
+| `--color-warning-text` | `#FFD479` | `#805300` | Warning labels and icons |
+| `--color-info-text` | `#82D8EE` | `#075985` | Informational labels and icons |
+
+Validate each token against its actual surface in both themes before release.
 - Never communicate success, warning, error or order state using color alone; pair color with readable text and, where helpful, an icon.
 - Keep glow effects limited to a focused active/selected detail. Avoid permanent glow around every card or control.
 
