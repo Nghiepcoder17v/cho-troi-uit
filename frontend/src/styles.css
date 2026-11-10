@@ -379,6 +379,11 @@ select:focus-visible {
   opacity: 0.85;
 }
 
+.search-bar:focus-within {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px rgb(199 243 107 / 16%);
+}
+
 .search-bar button,
 .dark-button {
   min-height: 42px;
@@ -1467,11 +1472,13 @@ footer span:first-child {
   }
 
   .nav-links {
+    width: auto;
     position: absolute;
     z-index: 30;
     top: calc(100% + 8px);
     right: 0;
     left: 0;
+    order: initial;
     display: none;
     flex-direction: column;
     align-items: stretch;
