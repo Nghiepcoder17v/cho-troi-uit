@@ -182,9 +182,15 @@ function App() {
     if (submittedIds.length) {
       setNotice(`${submittedIds.length} yêu cầu mua đã được gửi. Sản phẩm đang được giữ chỗ chờ người bán phản hồi.`);
     }
-    if (failures.length) setError(`Một số sản phẩm chưa gửi được yêu cầu:\n${failures.join("\n")}`);
     await refreshProducts();
-    if (user) await refreshAccount();
+    if (user) {
+      try {
+        await refreshAccount();
+      } catch (reason) {
+        failures.push(reason instanceof Error ? `Không thể làm mới dữ liệu tài khoản: ${reason.message}` : "Không thể làm mới dữ liệu tài khoản");
+      }
+    }
+    if (failures.length) setError(`Một số sản phẩm chưa gửi được yêu cầu:\n${failures.join("\n")}`);
   };
 
   return (
