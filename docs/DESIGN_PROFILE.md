@@ -40,10 +40,10 @@ The result must remain a usable marketplace, not a gaming launcher or RGB showca
 
 | Token | Value | Intended role |
 |---|---|---|
-| Brand primary | \`#C7F36B\` | Main CTA fill, selected indicators, key highlights |
-| Brand secondary | \`#62D7F2\` | Secondary accent, informational details, subtle data visualization |
-| Brand dark | \`#0B0F14\` | Dark-theme page background |
-| Brand ink | \`#17212B\` | Primary text on light surfaces and text on bright accent fills |
+| Brand primary | `#C7F36B` | Main CTA fill, selected indicators, key highlights |
+| Brand secondary | `#62D7F2` | Secondary accent, informational details, subtle data visualization |
+| Brand dark | `#0B0F14` | Dark-theme page background |
+| Brand ink | `#17212B` | Primary text on light surfaces and text on bright accent fills |
 
 **Usage rules**
 
@@ -60,29 +60,29 @@ Dark is the default presentation for a first visit unless a later product decisi
 
 | Token | Value | Purpose |
 |---|---|---|
-| \`--color-bg\` | \`#0B0F14\` | Application background |
-| \`--color-surface\` | \`#121923\` | Cards, main panels |
-| \`--color-surface-elevated\` | \`#192332\` | Dialogs, popovers, elevated panels |
-| \`--color-border\` | \`#2B3949\` | Decorative and structural borders |
-| \`--color-text\` | \`#F4F7FB\` | Primary text |
-| \`--color-text-muted\` | \`#A2AFBC\` | Secondary text |
-| \`--color-primary\` | \`#C7F36B\` | Primary accent |
-| \`--color-secondary\` | \`#62D7F2\` | Secondary accent |
-| \`--color-on-accent\` | \`#0B0F14\` | Text and icons on bright accent fills |
+| `--color-bg` | `#0B0F14` | Application background |
+| `--color-surface` | `#121923` | Cards, main panels |
+| `--color-surface-elevated` | `#192332` | Dialogs, popovers, elevated panels |
+| `--color-border` | `#2B3949` | Decorative and structural borders |
+| `--color-text` | `#F4F7FB` | Primary text |
+| `--color-text-muted` | `#A2AFBC` | Secondary text |
+| `--color-primary` | `#C7F36B` | Primary accent |
+| `--color-secondary` | `#62D7F2` | Secondary accent |
+| `--color-on-accent` | `#0B0F14` | Text and icons on bright accent fills |
 
 ### 2.3 Light theme tokens
 
 | Token | Value | Purpose |
 |---|---|---|
-| \`--color-bg\` | \`#F3F6F9\` | Application background |
-| \`--color-surface\` | \`#FFFFFF\` | Cards, main panels |
-| \`--color-surface-elevated\` | \`#EAF0F5\` | Dialogs, popovers, elevated panels |
-| \`--color-border\` | \`#D5DEE7\` | Decorative and structural borders |
-| \`--color-text\` | \`#17212B\` | Primary text |
-| \`--color-text-muted\` | \`#526273\` | Secondary text |
-| \`--color-primary\` | \`#C7F36B\` | Primary accent |
-| \`--color-secondary\` | \`#62D7F2\` | Secondary accent |
-| \`--color-on-accent\` | \`#0B0F14\` | Text and icons on bright accent fills |
+| `--color-bg` | `#F3F6F9` | Application background |
+| `--color-surface` | `#FFFFFF` | Cards, main panels |
+| `--color-surface-elevated` | `#EAF0F5` | Dialogs, popovers, elevated panels |
+| `--color-border` | `#D5DEE7` | Decorative and structural borders |
+| `--color-text` | `#17212B` | Primary text |
+| `--color-text-muted` | `#526273` | Secondary text |
+| `--color-primary` | `#C7F36B` | Primary accent |
+| `--color-secondary` | `#62D7F2` | Secondary accent |
+| `--color-on-accent` | `#0B0F14` | Text and icons on bright accent fills |
 
 ### 2.4 Semantic colors
 
@@ -139,7 +139,7 @@ Use comfortable line-height for body text (approximately 1.5). Avoid overly tigh
 
 Use a 4 px base spacing unit. Preferred steps:
 
-\`4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80 px\`
+`4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80 px`
 
 Use spacing consistently within component families. Do not introduce arbitrary values when a token from this scale works.
 
@@ -314,7 +314,7 @@ These are starting points, not rigid requirements. Components must remain usable
 - Do not use color, position or icon alone to convey a state.
 - Provide sufficient contrast in both themes and in hover, focus, disabled and selected states.
 - Aim for comfortable touch targets around 44 × 44 CSS px; never fall below applicable WCAG 2.2 target-size requirements without a valid exception.
-- Respect \`prefers-reduced-motion\`.
+- Respect `prefers-reduced-motion`.
 - Avoid flashing, parallax or motion that interferes with reading or interaction.
 
 ## 9. Motion and micro-interactions
