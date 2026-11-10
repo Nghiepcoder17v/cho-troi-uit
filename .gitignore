@@ -8,6 +8,7 @@ venv/
 
 # Bí mật & cấu hình cục bộ (KHÔNG commit). .env.example thì được commit.
 .env
+.env.compose
 
 # Node.js (nếu có dùng frontend JS). Nên COMMIT package-lock.json để mọi người cài cùng phiên bản.
 node_modules/

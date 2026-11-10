@@ -5,8 +5,9 @@ frontend React, backend REST, cơ sở dữ liệu giao dịch và data pipeline
 phân tích hành vi giao dịch.
 
 > Trạng thái hiện tại: marketplace có luồng yêu cầu mua, giữ chỗ, seller duyệt
-> và xác nhận hoàn tất từ cả buyer lẫn seller. Backend và data pipeline có test
-> tự động trên SQLite; cần kiểm thử bổ sung trên SQL Server thật trước triển khai.
+> và xác nhận hoàn tất từ cả buyer lẫn seller. Step 7 đã xác nhận backend,
+> data pipeline và các luồng chính trên SQL Server cục bộ. Docker Compose được
+> bổ sung tại Step 8 để chuẩn hóa môi trường phát triển.
 
 ## Mục lục
 
@@ -19,6 +20,7 @@ phân tích hành vi giao dịch.
 - [Cấu hình môi trường](#cấu-hình-môi-trường)
 - [Chạy backend](#chạy-backend)
 - [Chạy frontend](#chạy-frontend)
+- [Chạy bằng Docker Compose](#chạy-bằng-docker-compose)
 - [Sinh và kiểm tra dữ liệu](#sinh-và-kiểm-tra-dữ-liệu)
 - [Chạy ETL và analytics](#chạy-etl-và-analytics)
 - [API chính](#api-chính)
@@ -418,9 +420,15 @@ Test bao phủ:
 - watermark, overlap window và quarantine dòng lỗi;
 - kiểm tra các truy vấn analytics.
 
-Test tự động hiện chạy trên SQLite để không yêu cầu SQL Server. Vì vậy cần
-kiểm thử bổ sung trên SQL Server thật cho filtered unique index, trigger
-`updated_at`, driver ODBC và tương thích dialect.
+Các test mặc định chạy trên SQLite để không yêu cầu SQL Server. Bộ integration
+test bật riêng đã chạy thành công trên SQL Server Express cục bộ; xem
+[biên bản Step 7](docs/SQLSERVER_INTEGRATION_TESTING.md) để biết phạm vi và kết quả.
+
+## Chạy bằng Docker Compose
+
+Compose chạy frontend production qua Nginx, FastAPI, SQL Server với hai database
+OLTP/DWH và các lệnh ETL/analytics tùy chọn. Hướng dẫn cấu hình, khởi tạo an toàn
+và lệnh vận hành nằm tại [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.md).
 
 ## Bảo mật và toàn vẹn dữ liệu
 
@@ -443,8 +451,8 @@ kiểm thử bổ sung trên SQL Server thật cho filtered unique index, trigge
 - [x] Xây dựng frontend marketplace và luồng yêu cầu mua hai bên.
 - [x] Bổ sung hệ thống review hai chiều, chỉ cho phép sau Completed (Step 5).
 - [x] Tổ chức lại Account Center thành các khu vực riêng và trang cá nhân công khai (Step 6).
-- [ ] Chạy kiểm thử tích hợp trên SQL Server thật ([hướng dẫn Step 7](docs/SQLSERVER_INTEGRATION_TESTING.md)).
-- [ ] Thêm Docker Compose cho OLTP, DWH, API và ETL.
+- [x] Hoàn tất kiểm thử tích hợp SQL Server, pipeline, build và smoke test Step 7 ([kết quả](docs/SQLSERVER_INTEGRATION_TESTING.md)).
+- [ ] Thêm và kiểm chứng Docker Compose cho OLTP, DWH, API, frontend và ETL ([hướng dẫn](docs/DOCKER_COMPOSE.md)).
 - [ ] Lập lịch chạy ETL tự động.
 - [ ] Bổ sung phân quyền và quản lý tin đăng.
 - [ ] Nâng dimension cần thiết lên SCD Type 2 để lưu lịch sử.

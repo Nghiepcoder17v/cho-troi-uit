@@ -7,6 +7,8 @@
 -- QUY ƯỚC : - Thời gian lưu theo UTC (SYSUTCDATETIME), khớp với backend (models.py)
 --           - Mọi bảng có updated_at để Incremental ETL bắt được cả thay đổi (vd: Available -> Sold)
 -- ==============================================================================
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
 SET NOCOUNT ON;
 GO
 
