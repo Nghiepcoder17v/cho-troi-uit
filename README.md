@@ -58,6 +58,8 @@ flowchart LR
 - SQL Server là database triển khai chính.
 - Schema được tạo bằng SQL script; backend **không tự động tạo bảng**.
 - JWT xác thực người dùng và bcrypt băm mật khẩu.
+- Account Center tách thông tin riêng tư khỏi trang cá nhân công khai; API public
+  không trả email, MSSV hoặc password hash.
 
 ### Data pipeline và DWH
 
@@ -233,10 +235,11 @@ npm run preview
 ```
 
 Frontend hiện có khám phá sản phẩm với tìm kiếm, lọc danh mục và phân trang;
-đăng nhập/đăng ký; đăng bán; giỏ hàng; chi tiết sản phẩm; hồ sơ và quản lý yêu
-cầu mua/bán. Checkout gửi yêu cầu mua, không thu tiền trong hệ thống. Sản phẩm
-được giữ chỗ đến khi seller chấp nhận/từ chối hoặc một bên hủy. Buyer và seller
-phải xác nhận hoàn tất riêng biệt trước khi giao dịch thành Completed.
+đăng nhập/đăng ký; đăng bán; chi tiết sản phẩm; Account Center chia thành tổng
+quan, hồ sơ cá nhân, trang cá nhân công khai, quản lý tin đăng, đơn mua, đơn bán,
+giỏ hàng và cài đặt. Checkout gửi yêu cầu mua, không thu tiền trong hệ thống.
+Sản phẩm được giữ chỗ đến khi seller chấp nhận/từ chối hoặc một bên hủy. Buyer
+và seller phải xác nhận hoàn tất riêng biệt trước khi giao dịch thành Completed.
 
 ## Sinh và kiểm tra dữ liệu
 
@@ -307,6 +310,10 @@ Chi tiết request/response nằm trong [`docs/api_contract.md`](docs/api_contra
 | `POST` | `/api/auth/register` | Đăng ký tài khoản UIT | Không |
 | `POST` | `/api/auth/login` | Đăng nhập và nhận JWT | Không |
 | `GET` | `/api/users/me` | Thông tin tài khoản hiện tại | Có |
+| `PATCH` | `/api/users/me` | Cập nhật họ tên và ngành học | Có |
+| `POST` | `/api/users/me/change-password` | Đổi mật khẩu sau khi xác minh mật khẩu hiện tại | Có |
+| `GET` | `/api/users/{id}/public-profile` | Thông tin hồ sơ công khai, không gồm email/MSSV | Không |
+| `GET` | `/api/users/{id}/products` | Tin đăng công khai Available/Sold của người dùng | Không |
 | `GET` | `/api/users/{id}/reputation` | Điểm trung bình và phân phối đánh giá thật | Không |
 | `GET` | `/api/users/{id}/reviews` | Danh sách đánh giá người dùng nhận được | Không |
 | `GET` | `/api/categories` | Danh sách danh mục | Không |
@@ -401,6 +408,8 @@ Test bao phủ:
 - đăng ký, đăng nhập và JWT;
 - review hai chiều, phân quyền theo giao dịch, chỉ cho phép sau Completed,
   sửa review của tác giả và tính điểm trung bình;
+- cập nhật hồ sơ cá nhân, đổi mật khẩu, giới hạn dữ liệu trang cá nhân công khai,
+  quản lý trạng thái tin đăng và lọc đơn mua/đơn bán;
 - validate sản phẩm và phân trang;
 - chống mua trùng trong transaction;
 - model constraints;
@@ -433,7 +442,7 @@ kiểm thử bổ sung trên SQL Server thật cho filtered unique index, trigge
 
 - [x] Xây dựng frontend marketplace và luồng yêu cầu mua hai bên.
 - [x] Bổ sung hệ thống review hai chiều, chỉ cho phép sau Completed (Step 5).
-- [ ] Tổ chức lại Account Center thành các khu vực riêng (Step 6).
+- [x] Tổ chức lại Account Center thành các khu vực riêng và trang cá nhân công khai (Step 6).
 - [ ] Chạy kiểm thử tích hợp trên SQL Server thật.
 - [ ] Thêm Docker Compose cho OLTP, DWH, API và ETL.
 - [ ] Lập lịch chạy ETL tự động.

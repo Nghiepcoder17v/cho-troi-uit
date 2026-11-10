@@ -53,7 +53,33 @@ Lỗi: `409` (email/MSSV đã tồn tại), `422` (sai định dạng).
 Lỗi: `401` (sai email hoặc mật khẩu — cùng một thông báo cho cả hai).
 
 ### Thông tin tài khoản — `GET /api/users/me` 🔒
-Trả về `{"status": "success", "data": { ...như phần data khi đăng ký... }}`.
+Trả về thông tin tài khoản hiện tại, gồm email và MSSV; endpoint này yêu cầu JWT.
+
+### Cập nhật hồ sơ cá nhân — `PATCH /api/users/me` 🔒
+Chỉ cập nhật `full_name` và `major`; email và MSSV không thể thay đổi qua endpoint
+này. Gửi `major: null` để xóa ngành học.
+```json
+{ "full_name": "Nguyễn Văn A", "major": "Kỹ thuật phần mềm" }
+```
+Trả về user hiện tại sau cập nhật. Body rỗng hoặc gửi các trường ngoài phạm vi
+sẽ bị từ chối.
+
+### Đổi mật khẩu — `POST /api/users/me/change-password` 🔒
+Phải gửi mật khẩu hiện tại để xác minh; mật khẩu mới dài tối thiểu 8 ký tự và
+tối đa 72 byte UTF-8.
+```json
+{ "current_password": "MatkhauCu123", "new_password": "MatkhauMoi123" }
+```
+Lỗi `400` nếu mật khẩu hiện tại không chính xác; `422` nếu dữ liệu mới không hợp lệ.
+
+### Trang cá nhân công khai — `GET /api/users/{user_id}/public-profile`
+Trả về `user_id`, họ tên, ngành học, ngày tham gia, điểm uy tín, số review và
+số giao dịch hoàn tất. Không trả email, MSSV hoặc dữ liệu xác thực.
+
+### Tin đăng công khai của người dùng — `GET /api/users/{user_id}/products`
+Trả về tin `Available` và `Sold` của người dùng, hỗ trợ phân trang và bộ lọc
+`status=Available|Sold`. Tin `Hidden` và `Reserved` không xuất hiện trên
+trang cá nhân công khai.
 
 ### Điểm uy tín — `GET /api/users/{user_id}/reputation`
 Điểm là trung bình cộng của các đánh giá thật mà người dùng nhận được, làm tròn

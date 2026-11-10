@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 Condition = Literal["Brand New", "Like New", "Good", "Fair"]
 ProductStatus = Literal["Available", "Reserved", "Sold", "Hidden"]
 ProductVisibility = Literal["Available", "Hidden"]
+PublicProductStatus = Literal["Available", "Sold"]
 
 _EMAIL_RE = re.compile(r"^[a-z0-9._+-]+@gm\.uit\.edu\.vn$")
 _STUDENT_ID_RE = re.compile(r"^\d{8}$")
@@ -76,6 +77,68 @@ class UserOut(BaseModel):
     full_name: str
     major: Optional[str] = None
     created_at: datetime
+
+
+class UserProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    major: Optional[str] = Field(None, max_length=50)
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def _validate_full_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            raise ValueError("Họ tên không được để trống")
+        value = value.strip()
+        if not value:
+            raise ValueError("Họ tên không được để trống")
+        return value
+
+    @field_validator("major")
+    @classmethod
+    def _normalize_major(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+    @model_validator(mode="after")
+    def _require_changes(self):
+        if not self.model_fields_set:
+            raise ValueError("Cần cung cấp ít nhất một trường để cập nhật")
+        return self
+
+
+class ChangePasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8)
+
+    @field_validator("current_password", "new_password")
+    @classmethod
+    def _password_byte_limit(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Mật khẩu tối đa 72 byte")
+        return value
+
+    @model_validator(mode="after")
+    def _password_must_change(self):
+        if self.current_password == self.new_password:
+            raise ValueError("Mật khẩu mới phải khác mật khẩu hiện tại")
+        return self
+
+
+class PublicProfileOut(BaseModel):
+    user_id: int
+    full_name: str
+    major: Optional[str] = None
+    created_at: datetime
+    score: Optional[float] = None
+    review_count: int
+    completed_sales: int
+    label: str
 
 
 class SellerOut(BaseModel):
@@ -319,3 +382,14 @@ class ReviewEnvelope(BaseModel):
 class ReviewListEnvelope(BaseModel):
     status: str = "success"
     data: list[ReviewOut]
+
+
+
+class MessageEnvelope(BaseModel):
+    status: str = "success"
+    message: str
+
+
+class PublicProfileEnvelope(BaseModel):
+    status: str = "success"
+    data: PublicProfileOut
