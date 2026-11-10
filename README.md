@@ -349,6 +349,9 @@ erDiagram
     CATEGORIES ||--o{ PRODUCTS : contains
     USERS ||--o{ TRANSACTIONS : buys
     PRODUCTS ||--o| TRANSACTIONS : has
+    USERS ||--o{ REVIEWS : writes
+    USERS ||--o{ REVIEWS : receives
+    TRANSACTIONS ||--o{ REVIEWS : reviewed_in
 ```
 
 Các bảng chính:

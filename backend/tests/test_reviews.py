@@ -211,3 +211,31 @@ def test_reputation_uses_average_of_real_received_reviews(
     assert data["rating_distribution"] == {"1": 0, "2": 0, "3": 0, "4": 1, "5": 1}
     assert data["completed_sales"] == 2
     assert data["total_sales"] == 2
+
+
+
+def test_legacy_self_transaction_cannot_create_a_self_review(
+    client, seller_headers, product_id, session_factory
+):
+    seller_id = client.get("/api/users/me", headers=seller_headers).json()["data"]["user_id"]
+    with session_factory() as session:
+        product = session.get(models.Product, product_id)
+        product.status = "Sold"
+        transaction = models.Transaction(
+            product_id=product_id,
+            buyer_id=seller_id,
+            amount=45000,
+            status="Completed",
+            buyer_confirmed_at=None,
+            seller_confirmed_at=None,
+        )
+        session.add(transaction)
+        session.commit()
+        transaction_id = transaction.transaction_id
+
+    response = client.post(
+        f"/api/transactions/{transaction_id}/reviews",
+        headers=seller_headers,
+        json={"rating": 5},
+    )
+    assert response.status_code == 400

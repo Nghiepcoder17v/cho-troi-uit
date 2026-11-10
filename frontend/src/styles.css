@@ -1919,3 +1919,21 @@ footer span:first-child {
     flex-direction: column;
   }
 }
+
+
+/* Four account metrics on wide screens, with room to wrap on smaller displays. */
+.account-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .account-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .account-stats {
+    grid-template-columns: 1fr;
+  }
+}
