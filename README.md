@@ -452,7 +452,7 @@ và lệnh vận hành nằm tại [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.
 - [x] Bổ sung hệ thống review hai chiều, chỉ cho phép sau Completed (Step 5).
 - [x] Tổ chức lại Account Center thành các khu vực riêng và trang cá nhân công khai (Step 6).
 - [x] Hoàn tất kiểm thử tích hợp SQL Server, pipeline, build và smoke test Step 7 ([kết quả](docs/SQLSERVER_INTEGRATION_TESTING.md)).
-- [ ] Thêm và kiểm chứng Docker Compose cho OLTP, DWH, API, frontend và ETL ([hướng dẫn](docs/DOCKER_COMPOSE.md)).
+- [x] Thêm và kiểm chứng Docker Compose cho OLTP, DWH, API, frontend và ETL ([hướng dẫn và kết quả](docs/DOCKER_COMPOSE.md)).
 - [ ] Lập lịch chạy ETL tự động.
 - [ ] Bổ sung phân quyền và quản lý tin đăng.
 - [ ] Nâng dimension cần thiết lên SCD Type 2 để lưu lịch sử.
