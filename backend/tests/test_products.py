@@ -118,3 +118,33 @@ def test_owner_cannot_manually_mark_product_sold(client, seller_headers, product
     )
 
     assert response.status_code == 422
+
+
+
+def test_reserved_product_is_hidden_from_public_list_and_visible_to_owner(client, seller_headers, buyer_headers, product_id):
+    request = client.post(
+        "/api/transactions",
+        headers=buyer_headers,
+        json={"product_id": product_id, "amount": 40000},
+    )
+    assert request.status_code == 201
+    assert client.get("/api/products", params={"status": "Reserved"}).status_code == 400
+    assert client.get(f"/api/products/{product_id}").json()["data"]["status"] == "Reserved"
+    mine = client.get("/api/products/mine?status=Reserved", headers=seller_headers)
+    assert mine.status_code == 200
+    assert mine.json()["data"][0]["status"] == "Reserved"
+
+
+def test_owner_cannot_edit_reserved_product(client, seller_headers, buyer_headers, product_id):
+    request = client.post(
+        "/api/transactions",
+        headers=buyer_headers,
+        json={"product_id": product_id, "amount": 40000},
+    )
+    assert request.status_code == 201
+    response = client.patch(
+        f"/api/products/{product_id}",
+        headers=seller_headers,
+        json={"title": "Không được sửa khi đang giữ chỗ"},
+    )
+    assert response.status_code == 409

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 UNKNOWN_MAJOR = "Chưa xác định"
-VALID_TX_STATUS = {"Pending", "Completed", "Cancelled"}
+VALID_TX_STATUS = {"Pending", "Accepted", "Completed", "Cancelled"}
 
 # Danh sách ngành chuẩn + các cách viết tắt / sai khác thường gặp (so khớp không phân biệt hoa thường, dấu, khoảng trắng)
 CANONICAL_MAJORS = {
@@ -102,19 +102,29 @@ def transform_transactions(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
     """Trả về (fact_hợp_lệ, dòng_bị_từ_chối). Dòng bị từ chối có cột `reason`.
 
     `df` cần: transaction_id, product_id, buyer_id, seller_id, amount, status, transaction_date,
-              tx_updated_at, list_price, listed_at   (seller_id/list_price/listed_at là NULL nếu sản phẩm không tồn tại)
+              tx_updated_at, list_price, listed_at   (seller_id/list_price/listed_at là NULL nếu sản phẩm không tồn tại).
+    Với `Completed`, `tx_updated_at` là thời điểm xác nhận cuối (thời điểm hoàn tất);
+    giao dịch cũ giữ nguyên vì updated_at và transaction_date ban đầu trùng nhau.
     """
+    requested_at = to_dt(df["transaction_date"])
+    source_updated_at = to_dt(df["tx_updated_at"])
+    transaction_status = df["status"]
+    # Trong luồng mới, updated_at chính là lúc xác nhận thứ hai làm giao dịch Completed.
+    # Giao dịch cũ vẫn có updated_at bằng transaction_date, nên tương thích ngược.
+    # Với trạng thái chưa hoàn tất, giữ ngày gửi yêu cầu làm ngày sự kiện.
+    transaction_at = source_updated_at.where(transaction_status == "Completed", requested_at)
+
     d = pd.DataFrame({
         "transaction_id": df["transaction_id"].astype("int64"),
         "product_id": df["product_id"].astype("int64"),
         "buyer_id": df["buyer_id"].astype("int64"),
         "seller_id": pd.to_numeric(df["seller_id"], errors="coerce"),
-        "transaction_status": df["status"],
+        "transaction_status": transaction_status,
         "amount": pd.to_numeric(df["amount"], errors="coerce").astype("float64").round(2),
         "list_price": pd.to_numeric(df["list_price"], errors="coerce").astype("float64").round(2),
-        "transaction_at": to_dt(df["transaction_date"]),
+        "transaction_at": transaction_at,
         "listed_at": to_dt(df["listed_at"]),
-        "source_updated_at": to_dt(df["tx_updated_at"]),
+        "source_updated_at": source_updated_at,
     })
 
     # ---- kiểm tra chất lượng: lý do đầu tiên khớp sẽ được ghi nhận
@@ -124,7 +134,7 @@ def transform_transactions(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
         ("Giá chốt thiếu hoặc âm", d["amount"].isna() | (d["amount"] < 0)),
         ("Người mua trùng người bán", d["buyer_id"] == d["seller_id"]),
         ("Giá chốt cao hơn giá niêm yết", d["amount"] > d["list_price"]),
-        ("Giao dịch xảy ra trước khi sản phẩm được đăng", d["transaction_at"] < d["listed_at"]),
+        ("Giao dịch xảy ra trước khi sản phẩm được đăng", requested_at < d["listed_at"]),
     ]
     reason = pd.Series(pd.NA, index=d.index, dtype="object")
     for text, bad in rules:

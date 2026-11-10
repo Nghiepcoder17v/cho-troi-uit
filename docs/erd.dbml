@@ -25,7 +25,7 @@ Table products {
   description nvarchar(max)
   price decimal(10,2) [not null, note: 'CHECK >= 0']
   condition varchar(20) [not null, note: "Brand New | Like New | Good | Fair"]
-  status varchar(20) [not null, default: 'Available', note: "Available | Sold | Hidden"]
+  status varchar(20) [not null, default: 'Available', note: "Available | Reserved | Sold | Hidden"]
   created_at datetime2 [not null]
   updated_at datetime2 [not null]
 
@@ -42,9 +42,11 @@ Table transactions {
   product_id int [not null, ref: > products.product_id]
   buyer_id int [not null, ref: > users.user_id]
   amount decimal(10,2) [not null, note: 'giá chốt, CHECK >= 0']
-  status varchar(20) [not null, default: 'Pending', note: "Pending | Completed | Cancelled"]
-  transaction_date datetime2 [not null]
+  status varchar(20) [not null, default: 'Pending', note: "Pending | Accepted | Completed | Cancelled"]
+  transaction_date datetime2 [not null, note: "thời điểm buyer gửi yêu cầu"]
   updated_at datetime2 [not null]
+  buyer_confirmed_at datetime2 [note: "thời điểm buyer xác nhận hoàn tất"]
+  seller_confirmed_at datetime2 [note: "thời điểm seller xác nhận hoàn tất"]
 
   indexes {
     product_id [unique, note: "filtered: WHERE status <> 'Cancelled' (mỗi sản phẩm tối đa 1 giao dịch đang sống)"]

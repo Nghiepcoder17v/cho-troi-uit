@@ -11,7 +11,7 @@ Tài liệu này quy định các cổng giao tiếp giữa Frontend và Backend
 
 | Mã | Ý nghĩa |
 |----|---------|
-| 400 | Vi phạm quy tắc nghiệp vụ (tự mua hàng của mình, giá chốt > giá niêm yết...) |
+| 400 | Vi phạm quy tắc nghiệp vụ (tự mua hàng của mình, giá đề nghị > giá niêm yết...) |
 | 401 | Thiếu / sai / hết hạn token, hoặc sai email/mật khẩu |
 | 404 | Không tìm thấy (sản phẩm, danh mục). Sản phẩm `Hidden` cũng trả 404 |
 | 409 | Xung đột (email/MSSV đã đăng ký; sản phẩm đã bán) |
@@ -55,8 +55,9 @@ Lỗi: `401` (sai email hoặc mật khẩu — cùng một thông báo cho cả
 Trả về `{"status": "success", "data": { ...như phần data khi đăng ký... }}`.
 
 ### Điểm uy tín người bán — `GET /api/users/{user_id}/reputation`
-Trả về điểm từ 0–5 được tính từ số giao dịch hoàn tất của người bán, số giao dịch
-và nhãn diễn giải (`Người bán mới`, `Đang xây dựng uy tín`, `Uy tín` hoặc `Rất uy tín`).
+Hiện trả về số giao dịch hoàn tất và tổng số giao dịch. `score` là `null` và nhãn
+là `Chưa có đánh giá thật`; không hiển thị điểm uy tín tự sinh. Review thật sẽ
+được bổ sung ở Step 5 và chỉ áp dụng cho giao dịch `Completed`.
 
 ---
 
@@ -71,7 +72,7 @@ và nhãn diễn giải (`Người bán mới`, `Đang xây dựng uy tín`, `Uy
 | Tham số | Mặc định | Ghi chú |
 |---|---|---|
 | `category_id` | — | lọc theo danh mục |
-| `status` | `Available` | `Available` hoặc `Sold` (`Hidden` → 400) |
+| `status` | `Available` | Chỉ `Available` được liệt kê công khai; giá trị khác → 400 |
 | `q` | — | tìm theo tiêu đề (chứa từ khoá, không phân biệt hoa thường) |
 | `page` | 1 | ≥ 1 |
 | `page_size` | 20 | 1–100 |
@@ -108,8 +109,8 @@ là chủ sở hữu.
 
 ### Cập nhật hoặc ẩn sản phẩm — `PATCH /api/products/{product_id}` 🔒
 Chỉ chủ sở hữu mới có thể cập nhật. Có thể cập nhật `category_id`, `title`,
-`description`, `price`, `condition` và `status`. Sản phẩm đã `Sold` không thể
-chỉnh sửa.
+`description`, `price`, `condition` và `status`. Sản phẩm `Reserved` hoặc `Sold` không thể
+chỉnh sửa. Chủ sở hữu vẫn có thể xem `Reserved` trong `/api/products/mine`.
 `status` chỉ được chuyển giữa `Available` và `Hidden`; không thể tự chuyển tin
 đăng thành `Sold` nếu không có giao dịch.
 
@@ -117,25 +118,45 @@ chỉnh sửa.
 
 ## 3. Giao dịch (Transactions) 🔒
 
-### Đặt mua — `POST /api/transactions`
-Endpoint chỉ được gọi sau khi người dùng xem chi tiết, thêm sản phẩm vào giỏ hàng
-và xác nhận checkout. Sản phẩm chuyển `Available → Sold` và tạo giao dịch
-`Completed` trong cùng một lần commit. `amount` là giá chốt, được phép thấp hơn
-giá niêm yết (mặc cả) nhưng **không được cao hơn**.
+### Gửi yêu cầu mua — `POST /api/transactions`
+Người mua gửi yêu cầu; sản phẩm chuyển `Available → Reserved` và giao dịch
+được tạo ở trạng thái `Pending` trong cùng transaction. Seller phải chấp nhận
+hoặc từ chối yêu cầu. `amount` được phép thấp hơn giá niêm yết nhưng không được
+cao hơn.
 ```json
 { "product_id": 15, "amount": 1150000 }
 ```
-**201 Created**
-```json
-{ "status": "success", "message": "Đặt mua thành công",
-  "data": { "transaction_id": 81, "product_id": 15, "amount": 1150000.0,
-            "status": "Completed", "transaction_date": "2026-11-08T12:30:00" } }
-```
-Lỗi: `400` (tự mua hàng của mình / giá chốt > giá niêm yết), `404`, `409` (đã có người mua trước), `422`.
+**201 Created** trả về transaction `Pending`, hai trường
+`buyer_confirmed_at` và `seller_confirmed_at` ban đầu là `null`.
+Lỗi: `400` (tự mua / giá cao hơn niêm yết), `404`, `409` (không còn Available
+hoặc đã được giữ chỗ), `422`.
 
-### Lịch sử mua — `GET /api/transactions/purchases` 🔒
-Trả về các giao dịch mà người dùng hiện tại là buyer.
+### Seller chấp nhận — `POST /api/transactions/{transaction_id}/accept` 🔒
+Chỉ seller của sản phẩm được chuyển `Pending → Accepted`. Sản phẩm vẫn ở
+trạng thái `Reserved`.
 
-### Lịch sử bán — `GET /api/transactions/sales` 🔒
-Trả về các giao dịch của các sản phẩm do người dùng hiện tại bán. Mỗi dòng bao
-gồm thông tin sản phẩm, buyer và seller.
+### Seller từ chối — `POST /api/transactions/{transaction_id}/reject` 🔒
+Chỉ seller được từ chối giao dịch `Pending`. Giao dịch thành `Cancelled`, sản
+phẩm quay về `Available`.
+
+### Một bên hủy — `POST /api/transactions/{transaction_id}/cancel` 🔒
+Buyer hoặc seller có thể hủy giao dịch ở `Pending` hoặc `Accepted`. Nếu một
+bên đã xác nhận trước đó thì timestamp đó cũng bị xóa; sản phẩm được mở bán lại.
+Không thể hủy giao dịch `Completed`.
+
+### Xác nhận hoàn tất — `POST /api/transactions/{transaction_id}/confirm-completion` 🔒
+Buyer và seller phải tự xác nhận riêng sau khi tự bàn giao/thanh toán bên ngoài
+nền tảng. Xác nhận đầu tiên lưu timestamp nhưng giao dịch vẫn là `Accepted`.
+Chỉ khi cả hai bên xác nhận, giao dịch mới thành `Completed` và sản phẩm thành
+`Sold`. Một tài khoản không thể xác nhận thay bên kia.
+
+### Lịch sử — `GET /api/transactions/purchases` và `GET /api/transactions/sales` 🔒
+Trả về các giao dịch buyer/seller tham gia, trạng thái, thông tin hai bên và
+hai timestamp xác nhận.
+
+Trạng thái nghiệp vụ:
+
+- Transaction: `Pending → Accepted → Completed`, hoặc `Pending/Accepted → Cancelled`.
+- Product: `Available → Reserved → Sold`; từ `Reserved` về `Available` khi
+  seller từ chối hoặc một bên hủy.
+- Chỉ giao dịch `Completed` mới đủ điều kiện đánh giá ở Step 5.

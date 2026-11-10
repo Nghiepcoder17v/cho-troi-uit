@@ -6,7 +6,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Condition = Literal["Brand New", "Like New", "Good", "Fair"]
-ProductStatus = Literal["Available", "Sold", "Hidden"]
+ProductStatus = Literal["Available", "Reserved", "Sold", "Hidden"]
 ProductVisibility = Literal["Available", "Hidden"]
 
 _EMAIL_RE = re.compile(r"^[a-z0-9._+-]+@gm\.uit\.edu\.vn$")
@@ -87,7 +87,7 @@ class SellerOut(BaseModel):
 
 class SellerReputationOut(BaseModel):
     user_id: int
-    score: float
+    score: Optional[float] = None
     completed_sales: int
     total_sales: int
     label: str
@@ -172,7 +172,7 @@ class ProductCreated(BaseModel):
 # ---------------------------------------------------------------- TRANSACTION
 class TransactionCreate(BaseModel):
     product_id: int
-    amount: Decimal = Field(..., ge=0, le=MAX_PRICE, decimal_places=2, description="Giá chốt (<= giá niêm yết)")
+    amount: Decimal = Field(..., ge=0, le=MAX_PRICE, decimal_places=2, description="Giá đề nghị (<= giá niêm yết)")
 
 
 class TransactionOut(BaseModel):
@@ -183,6 +183,8 @@ class TransactionOut(BaseModel):
     amount: float
     status: str
     transaction_date: datetime
+    buyer_confirmed_at: Optional[datetime] = None
+    seller_confirmed_at: Optional[datetime] = None
 
 
 class TransactionHistoryOut(TransactionOut):

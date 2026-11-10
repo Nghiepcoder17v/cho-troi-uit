@@ -79,11 +79,31 @@ export async function createProduct(body: {
   })).data.product_id;
 }
 
+export async function getProduct(productId: number): Promise<Product> {
+  return (await request<Envelope<Product>>(`/api/products/${productId}`)).data;
+}
+
 export async function buyProduct(product_id: number, amount: number): Promise<void> {
   await request(`/api/transactions`, {
     method: "POST",
     body: JSON.stringify({ product_id, amount }),
   });
+}
+
+export async function acceptTransaction(transactionId: number): Promise<void> {
+  await request(`/api/transactions/${transactionId}/accept`, { method: "POST" });
+}
+
+export async function rejectTransaction(transactionId: number): Promise<void> {
+  await request(`/api/transactions/${transactionId}/reject`, { method: "POST" });
+}
+
+export async function cancelTransaction(transactionId: number): Promise<void> {
+  await request(`/api/transactions/${transactionId}/cancel`, { method: "POST" });
+}
+
+export async function confirmTransactionCompletion(transactionId: number): Promise<void> {
+  await request(`/api/transactions/${transactionId}/confirm-completion`, { method: "POST" });
 }
 
 export async function getMyProducts(): Promise<Product[]> {

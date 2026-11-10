@@ -63,7 +63,7 @@ CREATE TABLE PRODUCTS (
     CONSTRAINT FK_Products_Category FOREIGN KEY (category_id) REFERENCES CATEGORIES (category_id),
     CONSTRAINT CHK_Product_Price     CHECK (price >= 0),
     CONSTRAINT CHK_Product_Condition CHECK (condition IN ('Brand New', 'Like New', 'Good', 'Fair')),
-    CONSTRAINT CHK_Product_Status    CHECK (status IN ('Available', 'Sold', 'Hidden'))
+    CONSTRAINT CHK_Product_Status    CHECK (status IN ('Available', 'Reserved', 'Sold', 'Hidden'))
 );
 GO
 
@@ -76,19 +76,21 @@ CREATE TABLE TRANSACTIONS (
     status           VARCHAR(20)    NOT NULL CONSTRAINT DF_Transactions_Status DEFAULT 'Pending',
     transaction_date DATETIME2(0)   NOT NULL CONSTRAINT DF_Transactions_Date DEFAULT SYSUTCDATETIME(),
     updated_at       DATETIME2(0)   NOT NULL CONSTRAINT DF_Transactions_Updated DEFAULT SYSUTCDATETIME(),
+    buyer_confirmed_at DATETIME2(0) NULL,
+    seller_confirmed_at DATETIME2(0) NULL,
 
     CONSTRAINT PK_Transactions PRIMARY KEY (transaction_id),
     CONSTRAINT FK_Transactions_Product FOREIGN KEY (product_id) REFERENCES PRODUCTS (product_id),
     CONSTRAINT FK_Transactions_Buyer   FOREIGN KEY (buyer_id)   REFERENCES USERS (user_id),
     CONSTRAINT CHK_Transaction_Amount CHECK (amount >= 0),
-    CONSTRAINT CHK_Transaction_Status CHECK (status IN ('Pending', 'Completed', 'Cancelled'))
+    CONSTRAINT CHK_Transaction_Status CHECK (status IN ('Pending', 'Accepted', 'Completed', 'Cancelled'))
 );
 GO
 
 -- ==============================================================================
 -- INDEX
 -- ==============================================================================
--- Mỗi sản phẩm chỉ có TỐI ĐA 1 giao dịch "đang sống" (Pending/Completed).
+-- Mỗi sản phẩm chỉ có TỐI ĐA 1 giao dịch chưa hủy (Pending/Accepted/Completed).
 -- Đây là lớp chặn cuối cùng cho race condition: 2 người mua cùng lúc -> 1 người bị lỗi unique.
 CREATE UNIQUE INDEX UX_Transactions_ActiveProduct
     ON TRANSACTIONS (product_id) WHERE status <> 'Cancelled';

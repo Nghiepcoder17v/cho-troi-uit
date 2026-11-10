@@ -1,4 +1,6 @@
-export type ProductStatus = "Available" | "Sold" | "Hidden";
+export type ProductStatus = "Available" | "Reserved" | "Sold" | "Hidden";
+export type TransactionStatus = "Pending" | "Accepted" | "Completed" | "Cancelled";
+export type OrderAction = "accept" | "reject" | "cancel" | "confirm-completion";
 export type Condition = "Brand New" | "Like New" | "Good" | "Fair";
 
 export interface Seller {
@@ -8,7 +10,7 @@ export interface Seller {
 
 export interface SellerReputation {
   user_id: number;
-  score: number;
+  score: number | null;
   completed_sales: number;
   total_sales: number;
   label: string;
@@ -42,8 +44,10 @@ export interface TransactionHistory {
   transaction_id: number;
   product_id: number;
   amount: number;
-  status: string;
+  status: TransactionStatus;
   transaction_date: string;
+  buyer_confirmed_at: string | null;
+  seller_confirmed_at: string | null;
   product_title: string;
   buyer: Seller;
   seller: Seller;

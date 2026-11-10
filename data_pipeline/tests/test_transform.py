@@ -75,11 +75,28 @@ def test_derived_columns_for_completed_sale():
     assert (r.transaction_date_key, r.listed_date_key, r.is_completed) == (20260302, 20260301, 1)
 
 
+def test_completed_sale_uses_final_update_time_not_request_time():
+    ok, rejected = run(tx(
+        transaction_date="2026-03-02 12:00:00",
+        tx_updated_at="2026-03-03 09:00:00",
+    ))
+    assert rejected.empty
+    row = ok.iloc[0]
+    assert row.transaction_at == pd.Timestamp("2026-03-03 09:00:00")
+    assert row.transaction_date_key == 20260303
+    assert row.days_to_sell == 2.375
+
+
 def test_days_to_sell_only_for_completed():
-    ok, _ = run(tx(transaction_id=1), tx(transaction_id=2, status="Cancelled"))
+    ok, _ = run(
+        tx(transaction_id=1),
+        tx(transaction_id=2, status="Cancelled"),
+        tx(transaction_id=3, status="Accepted"),
+    )
     by_id = ok.set_index("transaction_id")
     assert by_id.loc[1, "days_to_sell"] == 1.5
     assert np.isnan(by_id.loc[2, "days_to_sell"]) and by_id.loc[2, "is_completed"] == 0
+    assert np.isnan(by_id.loc[3, "days_to_sell"]) and by_id.loc[3, "is_completed"] == 0
 
 
 def test_zero_list_price_gives_null_discount_pct_not_division_error():
