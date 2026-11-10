@@ -4,6 +4,7 @@ import type { FormEvent } from "react";
 import {
   acceptTransaction,
   buyProduct,
+  createTransactionReview,
   cancelTransaction,
   confirmTransactionCompletion,
   createProduct,
@@ -13,13 +14,15 @@ import {
   getPurchases,
   getSales,
   getSellerReputation,
+  getUserReviews,
+  updateReview,
   rejectTransaction,
   listCategories,
   listProducts,
   login,
   register,
 } from "./api";
-import type { Category, Condition, OrderAction, Pagination, Product, SellerReputation, TransactionHistory, User } from "./types";
+import type { Category, Condition, OrderAction, Pagination, Product, Review, SellerReputation, TransactionHistory, User } from "./types";
 
 const money = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 const conditions: Condition[] = ["Brand New", "Like New", "Good", "Fair"];
@@ -308,7 +311,7 @@ function App() {
       </main>}
 
       {view === "sell" && <SellView user={user} categories={categories} onLogin={() => { setAuthMode("login"); setShowAuth(true); }} onCreated={() => { setView("market"); void refreshProducts(); setNotice("Tin đăng của bạn đã được tạo."); }} />}
-      {view === "account" && user && <AccountView user={user} products={myProducts} purchases={purchases} sales={sales} onSignOut={signOut} onAction={(id, action) => void handleOrderAction(id, action)} />}
+      {view === "account" && user && <AccountView user={user} products={myProducts} purchases={purchases} sales={sales} onSignOut={signOut} onAction={(id, action) => void handleOrderAction(id, action)} onReviewSaved={refreshAccount} />}
       {view === "account" && !user && <div className="empty-state account-empty">Đăng nhập để xem tài khoản của bạn.</div>}
       {selectedProduct && <ProductDetail product={selectedProduct} onClose={() => setSelectedProduct(null)} onAdd={() => { addToCart(selectedProduct); setSelectedProduct(null); }} />}
       {showCart && <CartDrawer cart={cart} onClose={() => setShowCart(false)} onRemove={removeFromCart} onCheckout={() => void checkout()} />}
@@ -324,8 +327,63 @@ function ProductCard({ product, onView }: { product: Product; onView: () => void
 
 function ProductDetail({ product, onClose, onAdd }: { product: Product; onClose: () => void; onAdd: () => void }) {
   const [reputation, setReputation] = useState<SellerReputation | null>(null);
-  useEffect(() => { void getSellerReputation(product.seller.user_id).then(setReputation); }, [product.seller.user_id]);
-  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="detail-modal"><button className="close-button" onClick={onClose}>×</button><div className={`detail-image image-${product.product_id % 4}`}><span className="image-glyph">{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span></div><div className="detail-content"><p className="eyebrow">{product.condition} · Chi tiết sản phẩm</p><h2>{product.title}</h2><strong className="detail-price">{money.format(product.price)}</strong><p className="detail-description">{product.description || "Người bán chưa thêm mô tả cho sản phẩm này."}</p><div className="trust-card"><span className="trust-icon">✓</span><div><strong>Lịch sử giao dịch</strong><small>{reputation ? `${reputation.completed_sales} giao dịch hoàn tất` : "Đang tải số liệu giao dịch..."}</small></div></div><button className="dark-button submit-button" onClick={onAdd} disabled={product.status !== "Available"}>{product.status === "Available" ? "Thêm vào giỏ hàng ↗" : product.status === "Reserved" ? "Đang được giữ chỗ" : "Sản phẩm đã bán"}</button></div></section></div>;
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([
+      getSellerReputation(product.seller.user_id),
+      getUserReviews(product.seller.user_id),
+    ]).then(([nextReputation, nextReviews]) => {
+      if (!active) return;
+      setReputation(nextReputation);
+      setReviews(nextReviews);
+    }).catch(() => {
+      if (active) setReviews([]);
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [product.seller.user_id]);
+
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <section className="detail-modal">
+      <button className="close-button" onClick={onClose}>×</button>
+      <div className={`detail-image image-${product.product_id % 4}`}>
+        <span className="image-glyph">{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span>
+      </div>
+      <div className="detail-content">
+        <p className="eyebrow">{product.condition} · Chi tiết sản phẩm</p>
+        <h2>{product.title}</h2>
+        <strong className="detail-price">{money.format(product.price)}</strong>
+        <p className="detail-description">{product.description || "Người bán chưa thêm mô tả cho sản phẩm này."}</p>
+        <div className="trust-card">
+          <span className="trust-icon">✓</span>
+          <div>
+            <strong>Lịch sử giao dịch</strong>
+            <small>{reputation ? `${reputation.completed_sales} giao dịch hoàn tất` : "Đang tải số liệu giao dịch..."}</small>
+          </div>
+        </div>
+        <section className="review-section">
+          <div className="review-section-heading">
+            <div>
+              <strong>Uy tín người bán</strong>
+              <small>{reputation?.review_count ?? 0} đánh giá đã xác thực</small>
+            </div>
+            <strong className="review-score">
+              {reputation?.score == null ? "Chưa có điểm" : `${reputation.score.toFixed(1)}/5`}
+            </strong>
+          </div>
+          {loading ? <p className="muted">Đang tải đánh giá...</p> : <ReviewList reviews={reviews} emptyText="Người bán chưa nhận được đánh giá nào." />}
+        </section>
+        <button className="dark-button submit-button" onClick={onAdd} disabled={product.status !== "Available"}>
+          {product.status === "Available" ? "Thêm vào giỏ hàng ↗" : product.status === "Reserved" ? "Đang được giữ chỗ" : "Sản phẩm đã bán"}
+        </button>
+      </div>
+    </section>
+  </div>;
 }
 
 function CartDrawer({ cart, onClose, onRemove, onCheckout }: { cart: Product[]; onClose: () => void; onRemove: (id: number) => void; onCheckout: () => void }) {
@@ -342,7 +400,7 @@ function SellView({ user, categories, onLogin, onCreated }: { user: User | null;
 }
 
 function AccountView({
-  user, products, purchases, sales, onSignOut, onAction,
+  user, products, purchases, sales, onSignOut, onAction, onReviewSaved,
 }: {
   user: User;
   products: Product[];
@@ -350,11 +408,30 @@ function AccountView({
   sales: TransactionHistory[];
   onSignOut: () => void;
   onAction: (id: number, action: OrderAction) => void;
+  onReviewSaved: () => Promise<void>;
 }) {
+  const [reputation, setReputation] = useState<SellerReputation | null>(null);
+  const [receivedReviews, setReceivedReviews] = useState<Review[]>([]);
   const completedPurchases = purchases.filter((item) => item.status === "Completed");
   const completedSales = sales.filter((item) => item.status === "Completed");
   const spent = completedPurchases.reduce((sum, item) => sum + item.amount, 0);
   const earned = completedSales.reduce((sum, item) => sum + item.amount, 0);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      getSellerReputation(user.user_id),
+      getUserReviews(user.user_id),
+    ]).then(([nextReputation, nextReviews]) => {
+      if (!active) return;
+      setReputation(nextReputation);
+      setReceivedReviews(nextReviews);
+    }).catch(() => {
+      if (active) setReceivedReviews([]);
+    });
+    return () => { active = false; };
+  }, [user.user_id, purchases, sales]);
+
   return <main className="account-page">
     <div className="account-header">
       <div className="profile-avatar">{user.full_name.slice(0, 1)}</div>
@@ -365,6 +442,7 @@ function AccountView({
       <div><small>Tổng đã chi (hoàn tất)</small><strong>{money.format(spent)}</strong></div>
       <div><small>Tổng doanh thu (hoàn tất)</small><strong>{money.format(earned)}</strong></div>
       <div><small>Yêu cầu mua</small><strong>{purchases.length}</strong></div>
+      <div><small>Uy tín nhận được</small><strong>{reputation?.score == null ? "Chưa có" : `${reputation.score.toFixed(1)}/5`}</strong><small>{reputation?.review_count ?? 0} đánh giá</small></div>
     </div>
     <div className="account-columns">
       <section>
@@ -376,22 +454,33 @@ function AccountView({
       </section>
       <section>
         <div className="section-heading"><h2>Yêu cầu mua</h2><span className="result-count">{purchases.length}</span></div>
-        {purchases.length ? purchases.map((item) => <OrderCard key={item.transaction_id} item={item} role="buyer" onAction={onAction} />) : <p className="muted">Bạn chưa gửi yêu cầu mua nào.</p>}
+        {purchases.length ? purchases.map((item) => <OrderCard key={item.transaction_id} item={item} role="buyer" onAction={onAction} onReviewSaved={onReviewSaved} />) : <p className="muted">Bạn chưa gửi yêu cầu mua nào.</p>}
       </section>
       <section>
         <div className="section-heading"><h2>Yêu cầu bán</h2><span className="result-count">{sales.length}</span></div>
-        {sales.length ? sales.map((item) => <OrderCard key={item.transaction_id} item={item} role="seller" onAction={onAction} />) : <p className="muted">Bạn chưa có yêu cầu mua từ người khác.</p>}
+        {sales.length ? sales.map((item) => <OrderCard key={item.transaction_id} item={item} role="seller" onAction={onAction} onReviewSaved={onReviewSaved} />) : <p className="muted">Bạn chưa có yêu cầu mua từ người khác.</p>}
       </section>
     </div>
+    <section className="account-reviews">
+      <div className="section-heading"><div><p className="eyebrow">Phản hồi từ cộng đồng</p><h2>Đánh giá tôi nhận được</h2></div><span className="result-count">{receivedReviews.length}</span></div>
+      <ReviewList reviews={receivedReviews} emptyText="Bạn chưa nhận được đánh giá nào từ giao dịch hoàn tất." />
+      {reputation && <div className="rating-distribution" aria-label="Phân phối số lượt đánh giá">
+        {[5, 4, 3, 2, 1].map((rating) => <div className="rating-row" key={rating}>
+          <span>{rating} ★</span><span className="rating-track"><i style={{ width: `${reputation.review_count ? (reputation.rating_distribution[String(rating) as keyof typeof reputation.rating_distribution] / reputation.review_count) * 100 : 0}%` }} /></span>
+          <small>{reputation.rating_distribution[String(rating) as keyof typeof reputation.rating_distribution]}</small>
+        </div>)}
+      </div>}
+    </section>
   </main>;
 }
 
 function OrderCard({
-  item, role, onAction,
+  item, role, onAction, onReviewSaved,
 }: {
   item: TransactionHistory;
   role: "buyer" | "seller";
   onAction: (id: number, action: OrderAction) => void;
+  onReviewSaved: () => Promise<void>;
 }) {
   const statusLabel: Record<string, string> = {
     Pending: "Chờ người bán phản hồi",
@@ -421,9 +510,86 @@ function OrderCard({
       {item.status === "Accepted" && waitingForMe && <button type="button" className="dark-button" onClick={() => onAction(item.transaction_id, "confirm-completion")}>Xác nhận đã hoàn tất</button>}
       {canCancel && <button type="button" className="outline-button" onClick={() => onAction(item.transaction_id, "cancel")}>Hủy giao dịch</button>}
       {item.status === "Accepted" && !waitingForMe && <small className="muted">Bạn đã xác nhận. Đang chờ bên còn lại.</small>}
-      {item.status === "Completed" && <small className="muted">Chỉ giao dịch hoàn tất mới đủ điều kiện đánh giá.</small>}
     </div>
+    {item.status === "Completed" && <ReviewEditor item={item} role={role} onSaved={onReviewSaved} />}
   </article>;
+}
+
+function ReviewEditor({
+  item, role, onSaved,
+}: {
+  item: TransactionHistory;
+  role: "buyer" | "seller";
+  onSaved: () => Promise<void>;
+}) {
+  const [rating, setRating] = useState(item.my_review?.rating ?? 5);
+  const [comment, setComment] = useState(item.my_review?.comment ?? "");
+  const [editing, setEditing] = useState(!item.my_review);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const otherParty = role === "buyer" ? item.seller.full_name : item.buyer.full_name;
+
+  useEffect(() => {
+    setRating(item.my_review?.rating ?? 5);
+    setComment(item.my_review?.comment ?? "");
+    setEditing(!item.my_review);
+  }, [item.my_review?.review_id, item.my_review?.updated_at]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const body = { rating, comment: comment.trim() || null };
+      if (item.my_review) await updateReview(item.my_review.review_id, body);
+      else await createTransactionReview(item.transaction_id, body);
+      await onSaved();
+      setEditing(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Không thể lưu đánh giá");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <section className="review-editor">
+    {item.my_review && !editing ? <div className="review-own-summary">
+      <div><strong>Đánh giá của bạn dành cho {otherParty}</strong><span className="review-stars" aria-label={`${item.my_review.rating} trên 5 sao`}>{"★".repeat(item.my_review.rating)}{"☆".repeat(5 - item.my_review.rating)}</span></div>
+      {item.my_review.comment && <p>{item.my_review.comment}</p>}
+      <button type="button" className="text-button" onClick={() => setEditing(true)}>Chỉnh sửa đánh giá</button>
+    </div> : <form onSubmit={(event) => void submit(event)} className="review-form">
+      <div className="review-form-heading">
+        <strong>{item.my_review ? `Sửa đánh giá cho ${otherParty}` : `Đánh giá ${otherParty}`}</strong>
+        <span className="muted">Chỉ đánh giá thật từ giao dịch hoàn tất</span>
+      </div>
+      <div className="review-rating-input" role="group" aria-label="Chọn số sao">
+        {[1, 2, 3, 4, 5].map((value) => <button key={value} type="button" aria-label={`${value} sao`} aria-pressed={rating === value} onClick={() => setRating(value)}>{value <= rating ? "★" : "☆"}</button>)}
+      </div>
+      <label className="review-comment-label">Bình luận (không bắt buộc)
+        <textarea value={comment} maxLength={1000} rows={3} onChange={(event) => setComment(event.target.value)} placeholder="Chia sẻ trải nghiệm giao dịch của bạn..." />
+        <small>{comment.length}/1000 ký tự</small>
+      </label>
+      {error && <p className="form-error">{error}</p>}
+      <div className="review-form-actions">
+        <button type="submit" className="dark-button" disabled={saving}>{saving ? "Đang lưu..." : item.my_review ? "Lưu chỉnh sửa" : "Gửi đánh giá"}</button>
+        {item.my_review && <button type="button" className="outline-button" onClick={() => { setEditing(false); setError(""); }}>Hủy</button>}
+      </div>
+    </form>}
+  </section>;
+}
+
+function ReviewList({ reviews, emptyText }: { reviews: Review[]; emptyText: string }) {
+  if (!reviews.length) return <p className="muted review-empty">{emptyText}</p>;
+  return <div className="review-list">
+    {reviews.map((review) => <article className="review-item" key={review.review_id}>
+      <div className="review-item-heading">
+        <strong>{review.reviewer.full_name}</strong>
+        <span className="review-stars" aria-label={`${review.rating} trên 5 sao`}>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span>
+      </div>
+      <small className="review-product">{review.product_title} · Giao dịch #{review.transaction_id} · {new Date(review.created_at).toLocaleDateString("vi-VN")}</small>
+      {review.comment && <p>{review.comment}</p>}
+    </article>)}
+  </div>;
 }
 
 function AuthModal({ mode, onClose, onModeChange, onAuthenticated }: { mode: "login" | "register"; onClose: () => void; onModeChange: (mode: "login" | "register") => void; onAuthenticated: (user: User) => void }) {

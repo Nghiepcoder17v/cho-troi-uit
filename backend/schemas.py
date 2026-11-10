@@ -85,9 +85,68 @@ class SellerOut(BaseModel):
     full_name: str
 
 
+class ReviewCreate(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = Field(None, max_length=1000)
+
+    @field_validator("comment")
+    @classmethod
+    def _normalize_comment(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+
+class ReviewUpdate(BaseModel):
+    rating: Optional[int] = Field(None, ge=1, le=5)
+    comment: Optional[str] = Field(None, max_length=1000)
+
+    @field_validator("rating")
+    @classmethod
+    def _rating_cannot_be_null(cls, value: Optional[int]) -> Optional[int]:
+        if value is None:
+            raise ValueError("Điểm đánh giá không được để trống")
+        return value
+
+    @field_validator("comment")
+    @classmethod
+    def _normalize_comment(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+    @model_validator(mode="after")
+    def _require_at_least_one_change(self):
+        if not self.model_fields_set:
+            raise ValueError("Cần cung cấp rating hoặc comment để cập nhật")
+        return self
+
+
+class ReviewMineOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    review_id: int
+    rating: int
+    comment: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReviewOut(ReviewMineOut):
+    transaction_id: int
+    reviewer_id: int
+    reviewee_id: int
+    reviewer: SellerOut
+    product_title: str
+
+
 class SellerReputationOut(BaseModel):
     user_id: int
     score: Optional[float] = None
+    review_count: int
+    rating_distribution: dict[str, int]
     completed_sales: int
     total_sales: int
     label: str
@@ -191,6 +250,7 @@ class TransactionHistoryOut(TransactionOut):
     product_title: str
     buyer: SellerOut
     seller: SellerOut
+    my_review: Optional[ReviewMineOut] = None
 
 
 # ---------------------------------------------------------------- ENVELOPES (theo API contract)
@@ -247,3 +307,15 @@ class TransactionHistoryListEnvelope(BaseModel):
 class SellerReputationEnvelope(BaseModel):
     status: str = "success"
     data: SellerReputationOut
+
+
+
+class ReviewEnvelope(BaseModel):
+    status: str = "success"
+    message: Optional[str] = None
+    data: ReviewMineOut
+
+
+class ReviewListEnvelope(BaseModel):
+    status: str = "success"
+    data: list[ReviewOut]

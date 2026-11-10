@@ -104,6 +104,31 @@ CREATE INDEX IX_Products_Title ON PRODUCTS (title);
 CREATE INDEX IX_Transactions_Buyer ON TRANSACTIONS (buyer_id);
 CREATE INDEX IX_Transactions_Date ON TRANSACTIONS (transaction_date);
 
+-- 5. ĐÁNH GIÁ HAI CHIỀU SAU GIAO DỊCH
+CREATE TABLE REVIEWS (
+    review_id      INT IDENTITY (1, 1) NOT NULL,
+    transaction_id INT NOT NULL,
+    reviewer_id    INT NOT NULL,
+    reviewee_id    INT NOT NULL,
+    rating         INT NOT NULL,
+    comment        NVARCHAR(1000) NULL,
+    created_at     DATETIME2(0) NOT NULL CONSTRAINT DF_Reviews_Created DEFAULT SYSUTCDATETIME(),
+    updated_at     DATETIME2(0) NOT NULL CONSTRAINT DF_Reviews_Updated DEFAULT SYSUTCDATETIME(),
+
+    CONSTRAINT PK_Reviews PRIMARY KEY (review_id),
+    CONSTRAINT FK_Reviews_Transaction FOREIGN KEY (transaction_id) REFERENCES TRANSACTIONS (transaction_id),
+    CONSTRAINT FK_Reviews_Reviewer FOREIGN KEY (reviewer_id) REFERENCES USERS (user_id),
+    CONSTRAINT FK_Reviews_Reviewee FOREIGN KEY (reviewee_id) REFERENCES USERS (user_id),
+    CONSTRAINT UQ_Reviews_Transaction_Reviewer UNIQUE (transaction_id, reviewer_id),
+    CONSTRAINT CHK_Review_Rating CHECK (rating BETWEEN 1 AND 5),
+    CONSTRAINT CHK_Review_Comment CHECK (comment IS NULL OR LEN(comment) <= 1000)
+);
+GO
+
+CREATE INDEX IX_Reviews_Reviewee_Created ON REVIEWS (reviewee_id, created_at DESC);
+CREATE INDEX IX_Reviews_Transaction ON REVIEWS (transaction_id);
+GO
+
 -- Phục vụ Incremental ETL: WHERE updated_at > @last_watermark
 CREATE INDEX IX_Users_UpdatedAt ON USERS (updated_at);
 CREATE INDEX IX_Products_UpdatedAt ON PRODUCTS (updated_at);

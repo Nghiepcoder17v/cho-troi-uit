@@ -53,8 +53,8 @@ flowchart LR
 ### Backend và OLTP
 
 - FastAPI cung cấp REST API và Swagger tại `/docs`.
-- SQLAlchemy ORM ánh xạ các bảng `users`, `categories`, `products` và
-  `transactions`.
+- SQLAlchemy ORM ánh xạ các bảng `users`, `categories`, `products`,
+  `transactions` và `reviews`.
 - SQL Server là database triển khai chính.
 - Schema được tạo bằng SQL script; backend **không tự động tạo bảng**.
 - JWT xác thực người dùng và bcrypt băm mật khẩu.
@@ -101,7 +101,8 @@ cho-troi-uit/
 │   ├── 01_init_schema.sql       # reset và tạo schema OLTP (dev only)
 │   ├── 02_seed_reference_data.sql
 │   └── migrations/
-│       └── 20261110_purchase_requests.sql  # migration cộng thêm cho Step 4
+│       ├── 20261110_purchase_requests.sql  # migration cộng thêm cho Step 4
+│       └── 20261110_reviews.sql            # migration cộng thêm cho Step 5
 ├── docs/
 │   ├── api_contract.md
 │   ├── erd.dbml
@@ -304,6 +305,8 @@ Chi tiết request/response nằm trong [`docs/api_contract.md`](docs/api_contra
 | `POST` | `/api/auth/register` | Đăng ký tài khoản UIT | Không |
 | `POST` | `/api/auth/login` | Đăng nhập và nhận JWT | Không |
 | `GET` | `/api/users/me` | Thông tin tài khoản hiện tại | Có |
+| `GET` | `/api/users/{id}/reputation` | Điểm trung bình và phân phối đánh giá thật | Không |
+| `GET` | `/api/users/{id}/reviews` | Danh sách đánh giá người dùng nhận được | Không |
 | `GET` | `/api/categories` | Danh sách danh mục | Không |
 | `GET` | `/api/products` | Tìm kiếm và phân trang sản phẩm | Không |
 | `GET` | `/api/products/mine` | Danh sách sản phẩm của tôi | Có |
@@ -315,6 +318,8 @@ Chi tiết request/response nằm trong [`docs/api_contract.md`](docs/api_contra
 | `POST` | `/api/transactions/{id}/reject` | Người bán từ chối yêu cầu | Có |
 | `POST` | `/api/transactions/{id}/cancel` | Một bên hủy giao dịch đang mở | Có |
 | `POST` | `/api/transactions/{id}/confirm-completion` | Buyer/seller xác nhận hoàn tất | Có |
+| `POST` | `/api/transactions/{id}/reviews` | Gửi đánh giá đối phương sau Completed | Có |
+| `PATCH` | `/api/reviews/{id}` | Tác giả chỉnh sửa đánh giá của mình | Có |
 | `GET` | `/api/transactions/purchases` | Lịch sử mua hàng | Có |
 | `GET` | `/api/transactions/sales` | Lịch sử bán hàng | Có |
 
@@ -410,14 +415,17 @@ kiểm thử bổ sung trên SQL Server thật cho filtered unique index, trigge
 - SQL Server dùng foreign key, CHECK constraint và unique constraint.
 - Giữ chỗ `Available → Reserved` dùng điều kiện nguyên tử; chỉ chuyển `Reserved → Sold` sau xác nhận từ hai bên.
 - Filtered unique index giới hạn một giao dịch chưa hủy trên mỗi sản phẩm.
-- Migration cộng thêm ở `database_scripts/migrations/20261110_purchase_requests.sql`; không chạy lại `01_init_schema.sql` trên database hiện hữu.
+- Review có unique constraint theo `(transaction_id, reviewer_id)`, CHECK
+  rating 1–5; chỉ buyer/seller của giao dịch Completed mới được ghi review.
+- Migration cộng thêm ở `database_scripts/migrations/20261110_purchase_requests.sql`
+  và `database_scripts/migrations/20261110_reviews.sql`; không chạy lại `01_init_schema.sql` trên database hiện hữu.
 - Dữ liệu lỗi trong ETL được ghi vào `etl_rejected_rows`, không âm thầm nạp vào
   fact.
 
 ## Lộ trình phát triển
 
 - [x] Xây dựng frontend marketplace và luồng yêu cầu mua hai bên.
-- [ ] Bổ sung hệ thống review thật, chỉ cho phép sau Completed (Step 5).
+- [x] Bổ sung hệ thống review hai chiều, chỉ cho phép sau Completed (Step 5).
 - [ ] Tổ chức lại Account Center thành các khu vực riêng (Step 6).
 - [ ] Chạy kiểm thử tích hợp trên SQL Server thật.
 - [ ] Thêm Docker Compose cho OLTP, DWH, API và ETL.

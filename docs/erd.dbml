@@ -55,3 +55,20 @@ Table transactions {
     updated_at
   }
 }
+
+
+Table reviews {
+  review_id int [pk, increment]
+  transaction_id int [not null, ref: > transactions.transaction_id]
+  reviewer_id int [not null, ref: > users.user_id, note: 'Người viết đánh giá']
+  reviewee_id int [not null, ref: > users.user_id, note: 'Người nhận đánh giá']
+  rating int [not null, note: 'CHECK 1..5']
+  comment nvarchar(1000)
+  created_at datetime2 [not null]
+  updated_at datetime2 [not null]
+
+  indexes {
+    (transaction_id, reviewer_id) [unique, name: 'UQ_Reviews_Transaction_Reviewer']
+    (reviewee_id, created_at)
+  }
+}
