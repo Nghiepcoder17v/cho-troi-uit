@@ -58,3 +58,15 @@ The default ETL run is incremental after its first load. It does not pass `--dro
 | `backend` | FastAPI API; waits for initialized database and health check | Internal 8000 |
 | `sqlserver` | SQL Server Developer with OLTP and DWH databases | `SQLSERVER_PORT` (1433) |
 | `etl`, `analytics` | One-shot data pipeline tools under the `tools` profile | None |
+
+## Step 8 verification record
+
+Verified locally with Docker Desktop and a separate Compose project/volume:
+
+- All four images built: backend, frontend, ETL, and analytics. The frontend TypeScript/Vite production build passed inside its image.
+- `docker compose up --wait` completed. SQL Server, FastAPI, and Nginx became healthy; the initializer created the OLTP tables and five reference categories.
+- `GET /` through Nginx returned HTTP 200, and `GET /api/categories` returned all five categories.
+- The first ETL run completed with `SUCCESS`, created the DWH schema, and reconciled the empty source tables.
+- All four analytics queries ran against that DWH and returned empty result sets, as expected for an empty OLTP database.
+
+The first container run exposed that SQL Server requires `ANSI_NULLS` and `QUOTED_IDENTIFIER` enabled when creating the filtered unique index. Those settings are now explicit at the start of `01_init_schema.sql`; the clean-volume startup then completed successfully.
