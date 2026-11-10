@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { ThemeToggle } from "./components/ThemeToggle";
 import type { FormEvent } from "react";
 import {
   buyProduct,
@@ -21,6 +22,14 @@ const conditions: Condition[] = ["Brand New", "Like New", "Good", "Fair"];
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<"market" | "sell" | "account">("market");
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    try {
+      return localStorage.getItem("theme") === "light" ? "light" : "dark";
+    } catch {
+      return "dark";
+    }
+  });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [query, setQuery] = useState("");
@@ -37,6 +46,19 @@ function App() {
   const [showCart, setShowCart] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute(
+      "content",
+      theme === "dark" ? "#0B0F14" : "#F3F6F9",
+    );
+    try {
+      localStorage.setItem("theme", theme);
+    } catch {
+      // Theme still works for this session when browser storage is unavailable.
+    }
+  }, [theme]);
 
   const refreshProducts = async () => {
     try {
@@ -116,19 +138,84 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand" onClick={() => setView("market")} aria-label="Về trang chủ">
+        <button
+          className="brand"
+          onClick={() => { setView("market"); setMobileNavOpen(false); }}
+          aria-label="Về trang chủ"
+          type="button"
+        >
           <span className="brand-mark">ct</span>
           <span>chợ trời <b>UIT</b></span>
         </button>
-        <nav className="nav-links">
-          <button className={view === "market" ? "active" : ""} onClick={() => setView("market")}>Khám phá</button>
-          <button onClick={() => setView("sell")}>Đăng bán</button>
-          {user && <button className={view === "account" ? "active" : ""} onClick={() => setView("account")}>Tài khoản</button>}
+
+        <nav
+          className={`nav-links ${mobileNavOpen ? "is-open" : ""}`}
+          id="primary-navigation"
+          aria-label="Điều hướng chính"
+        >
+          <button
+            type="button"
+            className={view === "market" ? "active" : ""}
+            aria-current={view === "market" ? "page" : undefined}
+            onClick={() => { setView("market"); setMobileNavOpen(false); }}
+          >
+            Khám phá
+          </button>
+          <button
+            type="button"
+            className={view === "sell" ? "active" : ""}
+            aria-current={view === "sell" ? "page" : undefined}
+            onClick={() => { setView("sell"); setMobileNavOpen(false); }}
+          >
+            Đăng bán
+          </button>
+          {user && (
+            <button
+              type="button"
+              className={view === "account" ? "active" : ""}
+              aria-current={view === "account" ? "page" : undefined}
+              onClick={() => { setView("account"); setMobileNavOpen(false); }}
+            >
+              Tài khoản
+            </button>
+          )}
         </nav>
-        {user ? (
-          <button className="user-chip" onClick={() => setView("account")}><span>{user.full_name.slice(0, 1)}</span>{user.full_name}</button>
-        ) : <button className="outline-button" onClick={() => { setAuthMode("login"); setShowAuth(true); }}>Đăng nhập</button>}
-        <button className="cart-button" onClick={() => setShowCart(true)}>Giỏ hàng <b>{cart.length}</b></button>
+
+        <div className="header-actions">
+          {user ? (
+            <button className="user-chip" onClick={() => { setView("account"); setMobileNavOpen(false); }} type="button">
+              <span>{user.full_name.slice(0, 1)}</span>
+              <span className="user-chip-name">{user.full_name}</span>
+            </button>
+          ) : (
+            <button
+              className="outline-button"
+              onClick={() => { setAuthMode("login"); setShowAuth(true); }}
+              type="button"
+            >
+              Đăng nhập
+            </button>
+          )}
+          <button
+            className="cart-button"
+            onClick={() => { setShowCart(true); setMobileNavOpen(false); }}
+            aria-label={`Mở giỏ hàng, ${cart.length} sản phẩm`}
+            type="button"
+          >
+            Giỏ hàng <b>{cart.length}</b>
+          </button>
+          <ThemeToggle theme={theme} onToggle={() => setTheme((current) => current === "dark" ? "light" : "dark")} />
+          <button
+            className={`menu-toggle ${mobileNavOpen ? "is-open" : ""}`}
+            type="button"
+            aria-expanded={mobileNavOpen}
+            aria-controls="primary-navigation"
+            aria-label={mobileNavOpen ? "Đóng menu" : "Mở menu"}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            <span aria-hidden="true">{mobileNavOpen ? "×" : "☰"}</span>
+          </button>
+        </div>
       </header>
 
       {notice && <div className="toast success">{notice}<button onClick={() => setNotice("")}>×</button></div>}
