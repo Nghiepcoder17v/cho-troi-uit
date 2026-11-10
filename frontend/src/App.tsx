@@ -169,7 +169,7 @@ function App() {
         submittedIds.push(latestProduct.product_id);
       } catch (reason) {
         const message = reason instanceof Error ? reason.message : "Không thể gửi yêu cầu";
-        failures.push(\`\${cachedProduct.title}: \${message}\`);
+        failures.push(`${cachedProduct.title}: ${message}`);
       }
     }
 
@@ -180,9 +180,9 @@ function App() {
     setShowCart(false);
 
     if (submittedIds.length) {
-      setNotice(\`\${submittedIds.length} yêu cầu mua đã được gửi. Sản phẩm đang được giữ chỗ chờ người bán phản hồi.\`);
+      setNotice(`${submittedIds.length} yêu cầu mua đã được gửi. Sản phẩm đang được giữ chỗ chờ người bán phản hồi.`);
     }
-    if (failures.length) setError(\`Một số sản phẩm chưa gửi được yêu cầu:\\n\${failures.join("\\n")}\`);
+    if (failures.length) setError(`Một số sản phẩm chưa gửi được yêu cầu:\\n${failures.join("\\n")}`);
     await refreshProducts();
     if (user) await refreshAccount();
   };
@@ -364,7 +364,7 @@ function AccountView({
       <section>
         <div className="section-heading"><h2>Tin đăng của tôi</h2><span className="result-count">{products.length}</span></div>
         {products.length ? products.map((product) => <div className="history-row" key={product.product_id}>
-          <span className={\`mini-image image-\${product.product_id % 4}\`}>{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span>
+          <span className={`mini-image image-${product.product_id % 4}`}>{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span>
           <div><strong>{product.title}</strong><small>{product.status === "Reserved" ? "Đang giữ chỗ" : product.status === "Sold" ? "Đã bán" : product.status === "Hidden" ? "Đã ẩn" : "Đang mở bán"} · {money.format(product.price)}</small></div>
         </div>) : <p className="muted">Bạn chưa đăng tin nào.</p>}
       </section>
@@ -400,8 +400,8 @@ function OrderCard({
   return <article className="order-card">
     <div className="order-card-heading">
       <span className="mini-image image-2">↗</span>
-      <div><strong>{item.product_title}</strong><small>{role === "buyer" ? \`Người bán: \${item.seller.full_name}\` : \`Người mua: \${item.buyer.full_name}\`}</small></div>
-      <b className={\`status-pill status-\${item.status.toLowerCase()}\`}>{statusLabel[item.status] ?? item.status}</b>
+      <div><strong>{item.product_title}</strong><small>{role === "buyer" ? `Người bán: ${item.seller.full_name}` : `Người mua: ${item.buyer.full_name}`}</small></div>
+      <b className={`status-pill status-${item.status.toLowerCase()}`}>{statusLabel[item.status] ?? item.status}</b>
     </div>
     <div className="order-meta"><span>{money.format(item.amount)}</span><span>#{item.transaction_id}</span></div>
     {item.status === "Accepted" && <p className="confirmation-progress">
