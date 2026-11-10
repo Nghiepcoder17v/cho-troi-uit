@@ -134,7 +134,7 @@ def transform_transactions(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
         ("Giá chốt thiếu hoặc âm", d["amount"].isna() | (d["amount"] < 0)),
         ("Người mua trùng người bán", d["buyer_id"] == d["seller_id"]),
         ("Giá chốt cao hơn giá niêm yết", d["amount"] > d["list_price"]),
-        ("Giao dịch xảy ra trước khi sản phẩm được đăng", d["transaction_at"] < d["listed_at"]),
+        ("Giao dịch xảy ra trước khi sản phẩm được đăng", requested_at < d["listed_at"]),
     ]
     reason = pd.Series(pd.NA, index=d.index, dtype="object")
     for text, bad in rules:
