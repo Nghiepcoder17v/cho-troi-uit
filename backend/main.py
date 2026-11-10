@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select, text, update
+from sqlalchemy import case, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload
 
@@ -109,8 +109,8 @@ def list_products(
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    if status == "Hidden":  # tin đã ẩn không công khai
-        raise HTTPException(status_code=400, detail="Không thể liệt kê sản phẩm đã ẩn")
+    if status != "Available":  # chỉ tin sẵn sàng mới được xuất hiện trong chợ công khai
+        raise HTTPException(status_code=400, detail="Chợ công khai chỉ liệt kê sản phẩm đang Available")
 
     conditions = [models.Product.status == status]
     if category_id is not None:
@@ -228,15 +228,9 @@ def get_seller_reputation(user_id: int, db: Session = Depends(get_db)):
             models.Transaction.status == "Completed",
         )
     ) or 0
-    score = round(min(5.0, 3.0 + min(completed_sales, 20) * 0.1), 1)
-    if completed_sales == 0:
-        label = "Người bán mới"
-    elif score >= 4.8:
-        label = "Rất uy tín"
-    elif score >= 4.2:
-        label = "Uy tín"
-    else:
-        label = "Đang xây dựng uy tín"
+    # Không tự tạo điểm uy tín giả. Hệ thống đánh giá thật sẽ được bổ sung ở Step 5.
+    score = None
+    label = "Chưa có đánh giá thật"
     return {
         "status": "success",
         "data": {
@@ -266,8 +260,8 @@ def update_product(
     )
     if product is None:
         raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
-    if product.status == "Sold":
-        raise HTTPException(status_code=400, detail="Không thể chỉnh sửa sản phẩm đã bán")
+    if product.status in {"Reserved", "Sold"}:
+        raise HTTPException(status_code=409, detail="Không thể chỉnh sửa sản phẩm đang được giữ chỗ hoặc đã bán")
     if body.category_id is not None and db.get(models.Category, body.category_id) is None:
         raise HTTPException(status_code=404, detail="Danh mục không tồn tại")
 
@@ -280,7 +274,7 @@ def update_product(
 
 
 # ==========================================================================
-# 3. GIAO DỊCH (bảng Fact cho Data Pipeline)
+# 3. GIAO DỊCH (quy trình yêu cầu mua và xác nhận hai bên)
 # ==========================================================================
 @app.post("/api/transactions", response_model=schemas.TransactionEnvelope, status_code=201)
 def create_transaction(
@@ -293,36 +287,246 @@ def create_transaction(
         raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
     if product.seller_id == current_user.user_id:
         raise HTTPException(status_code=400, detail="Bạn không thể mua sản phẩm của chính mình")
+    if product.status != "Available":
+        raise HTTPException(status_code=409, detail="Sản phẩm đã được giữ chỗ hoặc không còn khả dụng")
     if body.amount > product.price:
         raise HTTPException(status_code=400, detail="Giá chốt không được cao hơn giá niêm yết")
 
-    # "Giữ chỗ" nguyên tử: chỉ MỘT request đổi được Available -> Sold.
-    # (Đọc status rồi mới ghi sẽ cho 2 người mua cùng lúc đều thành công.)
-    # synchronize_session=False: tránh OUTPUT/RETURNING (SQL Server không cho kèm trigger).
+    # Chỉ một request được phép giữ chỗ Available -> Reserved; so khớp cả giá hiện tại.
     claimed = db.execute(
         update(models.Product)
-        .where(models.Product.product_id == body.product_id, models.Product.status == "Available")
-        .values(status="Sold", updated_at=models.utcnow()),
+        .where(
+            models.Product.product_id == body.product_id,
+            models.Product.status == "Available",
+            models.Product.price == product.price,
+        )
+        .values(status="Reserved", updated_at=models.utcnow()),
         execution_options={"synchronize_session": False},
     )
     if claimed.rowcount != 1:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Sản phẩm này đã được bán")
+        raise HTTPException(status_code=409, detail="Sản phẩm vừa thay đổi hoặc đã được người khác giữ chỗ")
 
     transaction = models.Transaction(
         product_id=body.product_id,
         buyer_id=current_user.user_id,
         amount=body.amount,
-        status="Completed",
+        status="Pending",
     )
     db.add(transaction)
     try:
-        db.commit()  # UPDATE product + INSERT transaction trong cùng một commit
-    except IntegrityError:  # filtered unique index UX_Transactions_ActiveProduct
+        db.commit()
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Sản phẩm này đã được bán")
+        raise HTTPException(status_code=409, detail="Sản phẩm này đã có yêu cầu mua đang hoạt động")
     db.refresh(transaction)
-    return {"status": "success", "message": "Đặt mua thành công", "data": transaction}
+    return {
+        "status": "success",
+        "message": "Đã gửi yêu cầu mua. Sản phẩm đang được giữ chỗ chờ người bán phản hồi.",
+        "data": transaction,
+    }
+
+
+def _get_transaction_context(db: Session, transaction_id: int):
+    row = db.execute(
+        select(models.Transaction, models.Product)
+        .join(models.Product, models.Transaction.product_id == models.Product.product_id)
+        .where(models.Transaction.transaction_id == transaction_id)
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Giao dịch không tồn tại")
+    return row[0], row[1]
+
+
+@app.post("/api/transactions/{transaction_id}/accept", response_model=schemas.TransactionEnvelope)
+def accept_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    transaction, product = _get_transaction_context(db, transaction_id)
+    if product.seller_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Chỉ người bán mới có thể chấp nhận yêu cầu")
+    changed = db.execute(
+        update(models.Transaction)
+        .where(
+            models.Transaction.transaction_id == transaction_id,
+            models.Transaction.status == "Pending",
+        )
+        .values(status="Accepted", updated_at=models.utcnow()),
+        execution_options={"synchronize_session": False},
+    )
+    if changed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Yêu cầu không còn ở trạng thái chờ người bán")
+    db.commit()
+    db.refresh(transaction)
+    return {"status": "success", "message": "Đã chấp nhận yêu cầu mua", "data": transaction}
+
+
+@app.post("/api/transactions/{transaction_id}/reject", response_model=schemas.TransactionEnvelope)
+def reject_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    transaction, product = _get_transaction_context(db, transaction_id)
+    if product.seller_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Chỉ người bán mới có thể từ chối yêu cầu")
+    changed = db.execute(
+        update(models.Transaction)
+        .where(
+            models.Transaction.transaction_id == transaction_id,
+            models.Transaction.status == "Pending",
+        )
+        .values(status="Cancelled", updated_at=models.utcnow()),
+        execution_options={"synchronize_session": False},
+    )
+    if changed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Chỉ có thể từ chối yêu cầu đang chờ")
+    released = db.execute(
+        update(models.Product)
+        .where(
+            models.Product.product_id == transaction.product_id,
+            models.Product.status == "Reserved",
+        )
+        .values(status="Available", updated_at=models.utcnow()),
+        execution_options={"synchronize_session": False},
+    )
+    if released.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Không thể giải phóng sản phẩm; trạng thái dữ liệu đã thay đổi")
+    db.commit()
+    db.refresh(transaction)
+    return {"status": "success", "message": "Đã từ chối yêu cầu và mở bán lại sản phẩm", "data": transaction}
+
+
+@app.post("/api/transactions/{transaction_id}/cancel", response_model=schemas.TransactionEnvelope)
+def cancel_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    transaction, product = _get_transaction_context(db, transaction_id)
+    is_buyer = transaction.buyer_id == current_user.user_id
+    is_seller = product.seller_id == current_user.user_id
+    if not (is_buyer or is_seller):
+        raise HTTPException(status_code=403, detail="Bạn không tham gia giao dịch này")
+    changed = db.execute(
+        update(models.Transaction)
+        .where(
+            models.Transaction.transaction_id == transaction_id,
+            models.Transaction.status.in_(("Pending", "Accepted")),
+        )
+        .values(
+            status="Cancelled",
+            buyer_confirmed_at=None,
+            seller_confirmed_at=None,
+            updated_at=models.utcnow(),
+        ),
+        execution_options={"synchronize_session": False},
+    )
+    if changed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Giao dịch đã hoàn tất, đã hủy hoặc không thể hủy")
+    released = db.execute(
+        update(models.Product)
+        .where(
+            models.Product.product_id == transaction.product_id,
+            models.Product.status == "Reserved",
+        )
+        .values(status="Available", updated_at=models.utcnow()),
+        execution_options={"synchronize_session": False},
+    )
+    if released.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Không thể giải phóng sản phẩm; trạng thái dữ liệu đã thay đổi")
+    db.commit()
+    db.refresh(transaction)
+    return {"status": "success", "message": "Đã hủy giao dịch và mở bán lại sản phẩm", "data": transaction}
+
+
+@app.post("/api/transactions/{transaction_id}/confirm-completion", response_model=schemas.TransactionEnvelope)
+def confirm_transaction_completion(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    transaction, product = _get_transaction_context(db, transaction_id)
+    is_buyer = transaction.buyer_id == current_user.user_id
+    is_seller = product.seller_id == current_user.user_id
+    if not (is_buyer or is_seller):
+        raise HTTPException(status_code=403, detail="Bạn không tham gia giao dịch này")
+    if transaction.status != "Accepted":
+        raise HTTPException(status_code=409, detail="Chỉ giao dịch đã được người bán chấp nhận mới có thể xác nhận")
+
+    now = models.utcnow()
+    if is_buyer:
+        changed = db.execute(
+            update(models.Transaction)
+            .where(
+                models.Transaction.transaction_id == transaction_id,
+                models.Transaction.status == "Accepted",
+                models.Transaction.buyer_confirmed_at.is_(None),
+            )
+            .values(
+                buyer_confirmed_at=now,
+                status=case(
+                    (models.Transaction.seller_confirmed_at.is_not(None), "Completed"),
+                    else_="Accepted",
+                ),
+                updated_at=now,
+            ),
+            execution_options={"synchronize_session": False},
+        )
+    else:
+        changed = db.execute(
+            update(models.Transaction)
+            .where(
+                models.Transaction.transaction_id == transaction_id,
+                models.Transaction.status == "Accepted",
+                models.Transaction.seller_confirmed_at.is_(None),
+            )
+            .values(
+                seller_confirmed_at=now,
+                status=case(
+                    (models.Transaction.buyer_confirmed_at.is_not(None), "Completed"),
+                    else_="Accepted",
+                ),
+                updated_at=now,
+            ),
+            execution_options={"synchronize_session": False},
+        )
+    if changed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Bạn đã xác nhận rồi hoặc giao dịch vừa thay đổi")
+
+    current_status = db.scalar(
+        select(models.Transaction.status).where(models.Transaction.transaction_id == transaction_id)
+    )
+    if current_status == "Completed":
+        sold = db.execute(
+            update(models.Product)
+            .where(
+                models.Product.product_id == transaction.product_id,
+                models.Product.status == "Reserved",
+            )
+            .values(status="Sold", updated_at=models.utcnow()),
+            execution_options={"synchronize_session": False},
+        )
+        if sold.rowcount != 1:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Không thể hoàn tất vì sản phẩm không còn ở trạng thái giữ chỗ")
+
+    db.commit()
+    db.refresh(transaction)
+    message = (
+        "Hai bên đã xác nhận. Giao dịch hoàn tất và sản phẩm được đánh dấu đã bán."
+        if transaction.status == "Completed"
+        else "Đã ghi nhận xác nhận của bạn. Giao dịch chờ bên còn lại xác nhận."
+    )
+    return {"status": "success", "message": message, "data": transaction}
 
 
 def _transaction_history(
@@ -349,6 +553,8 @@ def _transaction_history(
             "amount": transaction.amount,
             "status": transaction.status,
             "transaction_date": transaction.transaction_date,
+            "buyer_confirmed_at": transaction.buyer_confirmed_at,
+            "seller_confirmed_at": transaction.seller_confirmed_at,
             "product_title": product.title,
             "buyer": {"user_id": buyer_user.user_id, "full_name": buyer_user.full_name},
             "seller": {"user_id": seller_user.user_id, "full_name": seller_user.full_name},

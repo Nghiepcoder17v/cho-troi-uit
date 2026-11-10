@@ -57,7 +57,7 @@ class Product(Base):
         CheckConstraint(
             "condition IN ('Brand New', 'Like New', 'Good', 'Fair')", name="CHK_Product_Condition"
         ),
-        CheckConstraint("status IN ('Available', 'Sold', 'Hidden')", name="CHK_Product_Status"),
+        CheckConstraint("status IN ('Available', 'Reserved', 'Sold', 'Hidden')", name="CHK_Product_Status"),
     )
 
     product_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -80,7 +80,7 @@ class Transaction(Base):
     __table_args__ = (
         CheckConstraint("amount >= 0", name="CHK_Transaction_Amount"),
         CheckConstraint(
-            "status IN ('Pending', 'Completed', 'Cancelled')", name="CHK_Transaction_Status"
+            "status IN ('Pending', 'Accepted', 'Completed', 'Cancelled')", name="CHK_Transaction_Status"
         ),
     )
 
@@ -91,6 +91,8 @@ class Transaction(Base):
     status = Column(String(20), nullable=False, default="Pending")
     transaction_date = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    buyer_confirmed_at = Column(DateTime, nullable=True)
+    seller_confirmed_at = Column(DateTime, nullable=True)
 
     product = relationship("Product")
     buyer = relationship("User")
