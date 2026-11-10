@@ -104,17 +104,25 @@ def transform_transactions(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
     `df` cần: transaction_id, product_id, buyer_id, seller_id, amount, status, transaction_date,
               tx_updated_at, list_price, listed_at   (seller_id/list_price/listed_at là NULL nếu sản phẩm không tồn tại)
     """
+    requested_at = to_dt(df["transaction_date"])
+    source_updated_at = to_dt(df["tx_updated_at"])
+    transaction_status = df["status"]
+    # Trong luồng mới, updated_at chính là lúc xác nhận thứ hai làm giao dịch Completed.
+    # Giao dịch cũ vẫn có updated_at bằng transaction_date, nên tương thích ngược.
+    # Với trạng thái chưa hoàn tất, giữ ngày gửi yêu cầu làm ngày sự kiện.
+    transaction_at = source_updated_at.where(transaction_status == "Completed", requested_at)
+
     d = pd.DataFrame({
         "transaction_id": df["transaction_id"].astype("int64"),
         "product_id": df["product_id"].astype("int64"),
         "buyer_id": df["buyer_id"].astype("int64"),
         "seller_id": pd.to_numeric(df["seller_id"], errors="coerce"),
-        "transaction_status": df["status"],
+        "transaction_status": transaction_status,
         "amount": pd.to_numeric(df["amount"], errors="coerce").astype("float64").round(2),
         "list_price": pd.to_numeric(df["list_price"], errors="coerce").astype("float64").round(2),
-        "transaction_at": to_dt(df["transaction_date"]),
+        "transaction_at": transaction_at,
         "listed_at": to_dt(df["listed_at"]),
-        "source_updated_at": to_dt(df["tx_updated_at"]),
+        "source_updated_at": source_updated_at,
     })
 
     # ---- kiểm tra chất lượng: lý do đầu tiên khớp sẽ được ghi nhận

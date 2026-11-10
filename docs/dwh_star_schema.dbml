@@ -8,14 +8,14 @@ Table fact_transactions {
   seller_user_key int [not null, ref: > dim_user.user_key, note: 'dim_user vai trò NGƯỜI BÁN']
   transaction_date_key int [not null, ref: > dim_date.date_key]
   listed_date_key int [not null, ref: > dim_date.date_key]
-  transaction_status varchar(20) [note: 'Pending | Completed | Cancelled']
+  transaction_status varchar(20) [note: 'Pending | Accepted | Completed | Cancelled']
   is_completed smallint [note: '1/0 để SUM trực tiếp']
   list_price decimal(10,2)
   amount decimal(10,2) [note: 'giá chốt']
   discount_amount decimal(10,2) [note: 'list_price - amount']
   discount_pct decimal(5,2) [note: 'NULL nếu list_price = 0']
   days_to_sell decimal(10,2) [note: 'chỉ có với giao dịch Completed']
-  transaction_at datetime
+  transaction_at datetime [note: 'với Completed: thời điểm xác nhận cuối; trạng thái khác: thời điểm tạo yêu cầu']
   source_updated_at datetime
   etl_loaded_at datetime
 }
