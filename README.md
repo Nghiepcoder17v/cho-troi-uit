@@ -155,7 +155,7 @@ sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts\02_seed_reference_data.s
 
 `01_init_schema.sql` có thao tác xóa và tạo lại toàn bộ bảng, chỉ dùng khi dựng
 mới/reset database phát triển. Với database đã có dữ liệu, backup trước rồi chạy
-migration cộng thêm `database_scripts\\migrations\\20261110_purchase_requests.sql`;
+migration cộng thêm `database_scripts/migrations/20261110_purchase_requests.sql`;
 không chạy file init schema trên database hiện hữu.
 
 ## Cấu hình môi trường

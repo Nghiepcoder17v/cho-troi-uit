@@ -118,45 +118,45 @@ chỉnh sửa. Chủ sở hữu vẫn có thể xem `Reserved` trong `/api/produ
 
 ## 3. Giao dịch (Transactions) 🔒
 
-### Gửi yêu cầu mua — \`POST /api/transactions\`
-Người mua gửi yêu cầu; sản phẩm chuyển \`Available → Reserved\` và giao dịch
-được tạo ở trạng thái \`Pending\` trong cùng transaction. Seller phải chấp nhận
-hoặc từ chối yêu cầu. \`amount\` được phép thấp hơn giá niêm yết nhưng không được
+### Gửi yêu cầu mua — `POST /api/transactions`
+Người mua gửi yêu cầu; sản phẩm chuyển `Available → Reserved` và giao dịch
+được tạo ở trạng thái `Pending` trong cùng transaction. Seller phải chấp nhận
+hoặc từ chối yêu cầu. `amount` được phép thấp hơn giá niêm yết nhưng không được
 cao hơn.
-\`\`\`json
+```json
 { "product_id": 15, "amount": 1150000 }
-\`\`\`
-**201 Created** trả về transaction \`Pending\`, hai trường
-\`buyer_confirmed_at\` và \`seller_confirmed_at\` ban đầu là \`null\`.
-Lỗi: \`400\` (tự mua / giá cao hơn niêm yết), \`404\`, \`409\` (không còn Available
-hoặc đã được giữ chỗ), \`422\`.
+```
+**201 Created** trả về transaction `Pending`, hai trường
+`buyer_confirmed_at` và `seller_confirmed_at` ban đầu là `null`.
+Lỗi: `400` (tự mua / giá cao hơn niêm yết), `404`, `409` (không còn Available
+hoặc đã được giữ chỗ), `422`.
 
-### Seller chấp nhận — \`POST /api/transactions/{transaction_id}/accept\` 🔒
-Chỉ seller của sản phẩm được chuyển \`Pending → Accepted\`. Sản phẩm vẫn ở
-trạng thái \`Reserved\`.
+### Seller chấp nhận — `POST /api/transactions/{transaction_id}/accept` 🔒
+Chỉ seller của sản phẩm được chuyển `Pending → Accepted`. Sản phẩm vẫn ở
+trạng thái `Reserved`.
 
-### Seller từ chối — \`POST /api/transactions/{transaction_id}/reject\` 🔒
-Chỉ seller được từ chối giao dịch \`Pending\`. Giao dịch thành \`Cancelled\`, sản
-phẩm quay về \`Available\`.
+### Seller từ chối — `POST /api/transactions/{transaction_id}/reject` 🔒
+Chỉ seller được từ chối giao dịch `Pending`. Giao dịch thành `Cancelled`, sản
+phẩm quay về `Available`.
 
-### Một bên hủy — \`POST /api/transactions/{transaction_id}/cancel\` 🔒
-Buyer hoặc seller có thể hủy giao dịch ở \`Pending\` hoặc \`Accepted\`. Nếu một
+### Một bên hủy — `POST /api/transactions/{transaction_id}/cancel` 🔒
+Buyer hoặc seller có thể hủy giao dịch ở `Pending` hoặc `Accepted`. Nếu một
 bên đã xác nhận trước đó thì timestamp đó cũng bị xóa; sản phẩm được mở bán lại.
-Không thể hủy giao dịch \`Completed\`.
+Không thể hủy giao dịch `Completed`.
 
-### Xác nhận hoàn tất — \`POST /api/transactions/{transaction_id}/confirm-completion\` 🔒
+### Xác nhận hoàn tất — `POST /api/transactions/{transaction_id}/confirm-completion` 🔒
 Buyer và seller phải tự xác nhận riêng sau khi tự bàn giao/thanh toán bên ngoài
-nền tảng. Xác nhận đầu tiên lưu timestamp nhưng giao dịch vẫn là \`Accepted\`.
-Chỉ khi cả hai bên xác nhận, giao dịch mới thành \`Completed\` và sản phẩm thành
-\`Sold\`. Một tài khoản không thể xác nhận thay bên kia.
+nền tảng. Xác nhận đầu tiên lưu timestamp nhưng giao dịch vẫn là `Accepted`.
+Chỉ khi cả hai bên xác nhận, giao dịch mới thành `Completed` và sản phẩm thành
+`Sold`. Một tài khoản không thể xác nhận thay bên kia.
 
-### Lịch sử — \`GET /api/transactions/purchases\` và \`GET /api/transactions/sales\` 🔒
+### Lịch sử — `GET /api/transactions/purchases` và `GET /api/transactions/sales` 🔒
 Trả về các giao dịch buyer/seller tham gia, trạng thái, thông tin hai bên và
 hai timestamp xác nhận.
 
 Trạng thái nghiệp vụ:
 
-- Transaction: \`Pending → Accepted → Completed\`, hoặc \`Pending/Accepted → Cancelled\`.
-- Product: \`Available → Reserved → Sold\`; từ \`Reserved\` về \`Available\` khi
+- Transaction: `Pending → Accepted → Completed`, hoặc `Pending/Accepted → Cancelled`.
+- Product: `Available → Reserved → Sold`; từ `Reserved` về `Available` khi
   seller từ chối hoặc một bên hủy.
-- Chỉ giao dịch \`Completed\` mới đủ điều kiện đánh giá ở Step 5.
+- Chỉ giao dịch `Completed` mới đủ điều kiện đánh giá ở Step 5.
