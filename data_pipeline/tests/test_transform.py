@@ -84,7 +84,8 @@ def test_completed_sale_uses_final_update_time_not_request_time():
     row = ok.iloc[0]
     assert row.transaction_at == pd.Timestamp("2026-03-03 09:00:00")
     assert row.transaction_date_key == 20260303
-    assert row.days_to_sell == 2.375
+    # The DWH column is decimal(10,2), so the transform stores two decimals.
+    assert row.days_to_sell == 2.38
 
 
 def test_days_to_sell_only_for_completed():
