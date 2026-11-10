@@ -1,0 +1,93 @@
+name: cho-troi-uit
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env.compose}
+    ports:
+      - "${SQLSERVER_PORT:-1433}:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -b -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    entrypoint: ["/bin/bash", "/scripts/docker-init.sh"]
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env.compose}
+    volumes:
+      - ./database_scripts:/database_scripts:ro
+      - ./scripts/docker-init.sh:/scripts/docker-init.sh:ro
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: "mssql+pyodbc://sa:${MSSQL_SA_PASSWORD}@sqlserver/ChoTroUIT?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.compose}
+      CORS_ORIGINS: http://localhost:${APP_PORT:-8080},http://127.0.0.1:${APP_PORT:-8080}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "${APP_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  etl:
+    build:
+      context: .
+      dockerfile: data_pipeline/Dockerfile
+    command: ["python", "run_etl.py"]
+    environment:
+      DATABASE_URL: "mssql+pyodbc://sa:${MSSQL_SA_PASSWORD}@sqlserver/ChoTroUIT?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+      DWH_DATABASE_URL: "mssql+pyodbc://sa:${MSSQL_SA_PASSWORD}@sqlserver/ChoTroUIT_DWH?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    profiles: ["tools"]
+
+  analytics:
+    build:
+      context: .
+      dockerfile: data_pipeline/Dockerfile
+    command: ["python", "run_analytics.py"]
+    environment:
+      DWH_DATABASE_URL: "mssql+pyodbc://sa:${MSSQL_SA_PASSWORD}@sqlserver/ChoTroUIT_DWH?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    profiles: ["tools"]
+
+volumes:
+  sqlserver-data:
