@@ -80,3 +80,24 @@ export interface User {
   major: string | null;
   created_at: string;
 }
+
+
+export interface PublicProfile {
+  user_id: number;
+  full_name: string;
+  major: string | null;
+  created_at: string;
+  score: number | null;
+  review_count: number;
+  completed_sales: number;
+  label: string;
+}
+
+export interface ProductUpdatePayload {
+  category_id?: number;
+  title?: string;
+  description?: string | null;
+  price?: number;
+  condition?: Condition;
+  status?: "Available" | "Hidden";
+}

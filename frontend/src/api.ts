@@ -3,6 +3,8 @@ import type {
   Condition,
   Pagination,
   Product,
+  ProductUpdatePayload,
+  PublicProfile,
   Review,
   ReviewMine,
   SellerReputation,
@@ -146,4 +148,45 @@ export async function updateReview(
     method: "PATCH",
     body: JSON.stringify(body),
   })).data;
+}
+
+
+export async function updateMyProfile(body: {
+  full_name?: string;
+  major?: string | null;
+}): Promise<User> {
+  return (await request<Envelope<User>>("/api/users/me", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })).data;
+}
+
+export async function changeMyPassword(body: {
+  current_password: string;
+  new_password: string;
+}): Promise<void> {
+  await request("/api/users/me/change-password", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateProduct(
+  productId: number,
+  body: ProductUpdatePayload,
+): Promise<Product> {
+  return (await request<Envelope<Product>>(`/api/products/${productId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })).data;
+}
+
+export async function getPublicProfile(userId: number): Promise<PublicProfile> {
+  return (await request<Envelope<PublicProfile>>(`/api/users/${userId}/public-profile`)).data;
+}
+
+export async function getPublicProducts(userId: number, status?: "Available" | "Sold"): Promise<Product[]> {
+  const query = new URLSearchParams({ page: "1", page_size: "100" });
+  if (status) query.set("status", status);
+  return (await request<Envelope<Product[]>>(`/api/users/${userId}/products?${query}`)).data;
 }

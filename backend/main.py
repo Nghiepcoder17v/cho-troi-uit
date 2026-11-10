@@ -91,6 +91,35 @@ def read_me(current_user: models.User = Depends(get_current_user)):
     return {"status": "success", "data": current_user}
 
 
+@app.patch("/api/users/me", response_model=schemas.UserEnvelope)
+def update_me(
+    body: schemas.UserProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(current_user, field, value)
+    current_user.updated_at = models.utcnow()
+    db.commit()
+    db.refresh(current_user)
+    return {"status": "success", "message": "Đã cập nhật hồ sơ cá nhân.", "data": current_user}
+
+
+@app.post("/api/users/me/change-password", response_model=schemas.MessageEnvelope)
+def change_my_password(
+    body: schemas.ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Mật khẩu hiện tại không chính xác")
+
+    current_user.password_hash = hash_password(body.new_password)
+    current_user.updated_at = models.utcnow()
+    db.commit()
+    return {"status": "success", "message": "Đã đổi mật khẩu thành công."}
+
+
 # ==========================================================================
 # 2. DANH MỤC & SẢN PHẨM
 # ==========================================================================
@@ -320,6 +349,69 @@ def get_seller_reputation(user_id: int, db: Session = Depends(get_db)):
             "completed_sales": completed_sales,
             "total_sales": total_sales,
             "label": label,
+        },
+    }
+
+
+@app.get("/api/users/{user_id}/public-profile", response_model=schemas.PublicProfileEnvelope)
+def get_public_profile(user_id: int, db: Session = Depends(get_db)):
+    user = db.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+
+    reputation = get_seller_reputation(user_id, db)["data"]
+    return {
+        "status": "success",
+        "data": {
+            "user_id": user.user_id,
+            "full_name": user.full_name,
+            "major": user.major,
+            "created_at": user.created_at,
+            "score": reputation["score"],
+            "review_count": reputation["review_count"],
+            "completed_sales": reputation["completed_sales"],
+            "label": reputation["label"],
+        },
+    }
+
+
+@app.get("/api/users/{user_id}/products", response_model=schemas.ProductListEnvelope)
+def list_public_user_products(
+    user_id: int,
+    status: Optional[schemas.PublicProductStatus] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    if db.get(models.User, user_id) is None:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+
+    conditions = [
+        models.Product.seller_id == user_id,
+        models.Product.status.in_(("Available", "Sold")),
+    ]
+    if status is not None:
+        conditions.append(models.Product.status == status)
+
+    total = db.scalar(
+        select(func.count()).select_from(models.Product).where(*conditions)
+    ) or 0
+    rows = db.scalars(
+        select(models.Product)
+        .options(joinedload(models.Product.seller))
+        .where(*conditions)
+        .order_by(models.Product.created_at.desc(), models.Product.product_id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return {
+        "status": "success",
+        "data": rows,
+        "pagination": {
+            "current_page": page,
+            "page_size": page_size,
+            "total_items": total,
+            "total_pages": math.ceil(total / page_size),
         },
     }
 
