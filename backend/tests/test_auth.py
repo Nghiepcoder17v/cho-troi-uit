@@ -81,3 +81,16 @@ def test_me_returns_current_user(client):
     h = register_and_login(client, "25520005")
     r = client.get("/api/users/me", headers=h)
     assert r.status_code == 200 and r.json()["data"]["student_id"] == "25520005"
+
+
+def test_seller_reputation_does_not_return_synthetic_rating(client):
+    headers = register_and_login(client, "25520006")
+    me = client.get("/api/users/me", headers=headers)
+    user_id = me.json()["data"]["user_id"]
+
+    response = client.get(f"/api/users/{user_id}/reputation")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["score"] is None
+    assert data["completed_sales"] == 0
+    assert data["label"] == "Chưa có đánh giá thật"
