@@ -84,17 +84,19 @@ Khi chưa bật `RUN_SQLSERVER_INTEGRATION=1`, các test SQL Server sẽ đượ
 
 ## 5. Phần cần xác nhận thủ công sau khi test tự động
 
-- Xác nhận database hiện tại của dự án đã có migration Step 4 rồi Step 5 theo đúng thứ tự, nếu database được tạo từ schema cũ.
+- Xác nhận database hiện tại của dự án đã có migration Step 4 rồi Step 5 theo đúng thứ tự, nếu database được tạo từ schema cũ. Trong lần kiểm thử Step 7, instance SQL Server Express cục bộ không có database `ChoTroUIT` hoặc `ChoTroUIT_DWH`; trạng thái database trên instance khác vẫn chưa được xác nhận.
 - Kiểm tra app kết nối bằng đúng `DATABASE_URL`, không phải `SQLSERVER_TEST_DATABASE_URL`.
-- Chạy smoke test trên môi trường test: đăng ký/đăng nhập, đăng sản phẩm, buyer gửi yêu cầu, seller chấp nhận, hai bên xác nhận hoàn tất, review hai chiều và xem Account Center.
+- API smoke test đã chạy trên `ChoTroUIT_Step7_Test` với dữ liệu giả. Kiểm thử UI thủ công cho Account Center vẫn cần thực hiện.
 - Chỉ đánh dấu Step 7 hoàn tất khi có log test, kết quả build và xác nhận schema trên đúng SQL Server target.
 
 ## Ghi nhận kết quả
 
 | Hạng mục | Kết quả | Bằng chứng / ghi chú |
 |---|---|---|
-| Backend pytest (SQLite) | Chưa chạy | |
-| SQL Server integration tests | Chưa chạy | |
-| Data pipeline pytest | Chưa chạy | |
-| Frontend build | Chưa chạy | |
-| SQL Server smoke test | Chưa chạy | |
+| Backend pytest (SQLite) | Passed | 66 passed, 3 skipped (các test SQL Server được skip trong lần chạy toàn bộ backend) |
+| SQL Server integration tests | Passed | 3 passed trên `ChoTroUIT_Step7_Test`; test schema, trigger `updated_at` và filtered unique index |
+| Data pipeline pytest | Passed | 61 passed; gồm initial/incremental/full refresh, idempotency, watermark, reconciliation và analytics |
+| Frontend build | Passed | `npm run build`; TypeScript và Vite production build thành công |
+| SQL Server API smoke test | Passed | 37 kiểm tra qua TestClient trên SQL Server test database; bao gồm auth, profile, privacy, product lifecycle, giao dịch, hủy và review |
+| Account Center UI smoke test | Chưa chạy | Cần kiểm tra thủ công trên giao diện |
+| Trạng thái migration database dự án | Chưa xác nhận | Không thấy `ChoTroUIT`/`ChoTroUIT_DWH` trên instance SQL Server cục bộ đã kiểm tra; không chạy migration |
