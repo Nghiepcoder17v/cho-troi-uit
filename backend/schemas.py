@@ -172,7 +172,7 @@ class ProductCreated(BaseModel):
 # ---------------------------------------------------------------- TRANSACTION
 class TransactionCreate(BaseModel):
     product_id: int
-    amount: Decimal = Field(..., ge=0, le=MAX_PRICE, decimal_places=2, description="Giá chốt (<= giá niêm yết)")
+    amount: Decimal = Field(..., ge=0, le=MAX_PRICE, decimal_places=2, description="Giá đề nghị (<= giá niêm yết)")
 
 
 class TransactionOut(BaseModel):

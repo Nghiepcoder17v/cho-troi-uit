@@ -102,7 +102,9 @@ def transform_transactions(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
     """Trả về (fact_hợp_lệ, dòng_bị_từ_chối). Dòng bị từ chối có cột `reason`.
 
     `df` cần: transaction_id, product_id, buyer_id, seller_id, amount, status, transaction_date,
-              tx_updated_at, list_price, listed_at   (seller_id/list_price/listed_at là NULL nếu sản phẩm không tồn tại)
+              tx_updated_at, list_price, listed_at   (seller_id/list_price/listed_at là NULL nếu sản phẩm không tồn tại).
+    Với `Completed`, `tx_updated_at` là thời điểm xác nhận cuối (thời điểm hoàn tất);
+    giao dịch cũ giữ nguyên vì updated_at và transaction_date ban đầu trùng nhau.
     """
     requested_at = to_dt(df["transaction_date"])
     source_updated_at = to_dt(df["tx_updated_at"])

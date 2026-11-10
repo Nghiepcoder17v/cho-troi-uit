@@ -98,8 +98,10 @@ cho-troi-uit/
 │   ├── analytics/
 │   └── tests/
 ├── database_scripts/
-│   ├── 01_init_schema.sql       # reset và tạo schema OLTP
-│   └── 02_seed_reference_data.sql
+│   ├── 01_init_schema.sql       # reset và tạo schema OLTP (dev only)
+│   ├── 02_seed_reference_data.sql
+│   └── migrations/
+│       └── 20261110_purchase_requests.sql  # migration cộng thêm cho Step 4
 ├── docs/
 │   ├── api_contract.md
 │   ├── erd.dbml
@@ -151,8 +153,10 @@ sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts\01_init_schema.sql
 sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts\02_seed_reference_data.sql
 ```
 
-`01_init_schema.sql` có thao tác xóa và tạo lại toàn bộ bảng, chỉ nên dùng cho
-môi trường phát triển.
+`01_init_schema.sql` có thao tác xóa và tạo lại toàn bộ bảng, chỉ dùng khi dựng
+mới/reset database phát triển. Với database đã có dữ liệu, backup trước rồi chạy
+migration cộng thêm `database_scripts\\migrations\\20261110_purchase_requests.sql`;
+không chạy file init schema trên database hiện hữu.
 
 ## Cấu hình môi trường
 
@@ -319,7 +323,7 @@ Quy tắc nghiệp vụ chính:
 - Email phải thuộc miền `@gm.uit.edu.vn`.
 - MSSV gồm 8 chữ số và phải khớp phần trước `@` của email.
 - Người dùng không thể mua sản phẩm của chính mình.
-- Giá chốt không được cao hơn giá niêm yết.
+- Giá đề nghị không được cao hơn giá niêm yết; khi seller chấp nhận, đây là giá giao dịch đã thống nhất.
 - Tạo yêu cầu mua chỉ giữ chỗ sản phẩm (`Available → Reserved`), chưa coi là giao dịch hoàn tất.
 - Seller phải chấp nhận yêu cầu; seller có thể từ chối để mở bán lại sản phẩm.
 - Buyer và seller xác nhận riêng; chỉ khi cả hai xác nhận, transaction thành `Completed` và product thành `Sold`.

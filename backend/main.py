@@ -290,7 +290,7 @@ def create_transaction(
     if product.status != "Available":
         raise HTTPException(status_code=409, detail="Sản phẩm đã được giữ chỗ hoặc không còn khả dụng")
     if body.amount > product.price:
-        raise HTTPException(status_code=400, detail="Giá chốt không được cao hơn giá niêm yết")
+        raise HTTPException(status_code=400, detail="Giá đề nghị không được cao hơn giá niêm yết")
 
     # Chỉ một request được phép giữ chỗ Available -> Reserved; so khớp cả giá hiện tại.
     claimed = db.execute(

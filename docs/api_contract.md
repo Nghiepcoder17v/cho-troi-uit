@@ -11,7 +11,7 @@ Tài liệu này quy định các cổng giao tiếp giữa Frontend và Backend
 
 | Mã | Ý nghĩa |
 |----|---------|
-| 400 | Vi phạm quy tắc nghiệp vụ (tự mua hàng của mình, giá chốt > giá niêm yết...) |
+| 400 | Vi phạm quy tắc nghiệp vụ (tự mua hàng của mình, giá đề nghị > giá niêm yết...) |
 | 401 | Thiếu / sai / hết hạn token, hoặc sai email/mật khẩu |
 | 404 | Không tìm thấy (sản phẩm, danh mục). Sản phẩm `Hidden` cũng trả 404 |
 | 409 | Xung đột (email/MSSV đã đăng ký; sản phẩm đã bán) |
