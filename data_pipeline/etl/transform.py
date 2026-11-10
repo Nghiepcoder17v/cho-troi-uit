@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 UNKNOWN_MAJOR = "Chưa xác định"
-VALID_TX_STATUS = {"Pending", "Completed", "Cancelled"}
+VALID_TX_STATUS = {"Pending", "Accepted", "Completed", "Cancelled"}
 
 # Danh sách ngành chuẩn + các cách viết tắt / sai khác thường gặp (so khớp không phân biệt hoa thường, dấu, khoảng trắng)
 CANONICAL_MAJORS = {

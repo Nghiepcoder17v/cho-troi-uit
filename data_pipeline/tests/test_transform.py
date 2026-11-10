@@ -76,10 +76,15 @@ def test_derived_columns_for_completed_sale():
 
 
 def test_days_to_sell_only_for_completed():
-    ok, _ = run(tx(transaction_id=1), tx(transaction_id=2, status="Cancelled"))
+    ok, _ = run(
+        tx(transaction_id=1),
+        tx(transaction_id=2, status="Cancelled"),
+        tx(transaction_id=3, status="Accepted"),
+    )
     by_id = ok.set_index("transaction_id")
     assert by_id.loc[1, "days_to_sell"] == 1.5
     assert np.isnan(by_id.loc[2, "days_to_sell"]) and by_id.loc[2, "is_completed"] == 0
+    assert np.isnan(by_id.loc[3, "days_to_sell"]) and by_id.loc[3, "is_completed"] == 0
 
 
 def test_zero_list_price_gives_null_discount_pct_not_division_error():
