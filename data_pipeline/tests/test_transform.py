@@ -47,11 +47,13 @@ def test_transform_users():
 def test_transform_products_joins_clean_category_and_handles_unknown():
     products = pd.DataFrame({"product_id": [1, 2], "category_id": [1, 99], "title": [" Sách  A ", "B"],
                              "condition": ["Good", "Fair"], "price": [50000, 20000], "status": ["Sold", "Available"],
-                             "created_at": ["2026-01-01 00:00:00", "2026-01-02 00:00:00"]})
+                             "created_at": ["2026-01-01 00:00:00", "2026-01-02 00:00:00"],
+                             "updated_at": ["2026-01-03 00:00:00", "2026-01-04 00:00:00"]})
     cats = pd.DataFrame({"category_id": [1], "category_name": [" Giáo   trình "]})
     out = T.transform_products(products, cats)
     assert out["category_name"].tolist() == ["Giáo trình", "Không rõ"]
     assert out["title"].tolist() == ["Sách A", "B"]
+    assert out["source_updated_at"].tolist() == [pd.Timestamp("2026-01-03"), pd.Timestamp("2026-01-04")]
 
 
 # ---------------------------------------------------------------- fact

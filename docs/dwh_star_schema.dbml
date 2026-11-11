@@ -32,14 +32,18 @@ Table dim_user {
 
 Table dim_product {
   product_key int [pk, increment]
-  product_id int [unique]
+  product_id int [note: 'khoá tự nhiên; unique filtered cho is_current = 1']
   category_id int
   category_name nvarchar(50) [note: 'gộp danh mục vào đây (star, không snowflake)']
   title nvarchar(200)
   condition varchar(20)
   list_price decimal(10,2)
-  current_status varchar(20) [note: 'SCD loại 1: trạng thái HIỆN TẠI']
+  current_status varchar(20) [note: 'thuộc tính lịch sử SCD Type 2']
   listed_at datetime
+  source_updated_at datetime
+  effective_from datetime [not null]
+  effective_to datetime
+  is_current boolean [not null]
   etl_loaded_at datetime
 }
 

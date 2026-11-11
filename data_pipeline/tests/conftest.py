@@ -39,7 +39,8 @@ def snapshot(dwh: sa.Engine) -> dict[str, pd.DataFrame]:
         return {
             "users": query_df(c, "SELECT user_id, cohort_year, full_name, major, user_created_at FROM dim_user ORDER BY user_id"),
             "products": query_df(c, "SELECT product_id, category_id, category_name, title, condition, list_price, "
-                                    "current_status, listed_at FROM dim_product ORDER BY product_id"),
+                                    "current_status, listed_at FROM dim_product WHERE is_current = 1 "
+                                    "ORDER BY product_id"),
             "facts": query_df(c, """
                 SELECT f.transaction_id, p.product_id, b.user_id AS buyer_id, s.user_id AS seller_id,
                        f.transaction_date_key, f.listed_date_key, f.transaction_status, f.is_completed,

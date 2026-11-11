@@ -4,9 +4,8 @@
                    ├── fact_transactions ──┤
         dim_product┘                 └── dim_user  (người bán)   <- cùng một dimension, hai vai trò
 
-Quy ước: dimension có khoá thay thế (surrogate key, IDENTITY) + khoá tự nhiên (user_id, product_id)
-unique; fact dùng transaction_id làm "degenerate dimension" (khoá chính, không có bảng dim riêng).
-Tất cả dimension là SCD loại 1 (ghi đè thuộc tính mới, không giữ lịch sử).
+Quy ước: dimension có khoá thay thế (surrogate key, IDENTITY); dim_user và dim_date là SCD loại 1,
+dim_product là SCD loại 2; fact dùng transaction_id làm "degenerate dimension".
 """
 import sqlalchemy as sa
 
@@ -44,15 +43,36 @@ dim_user = sa.Table(
 dim_product = sa.Table(
     "dim_product", metadata,
     sa.Column("product_key", sa.Integer, primary_key=True),
-    sa.Column("product_id", sa.Integer, nullable=False, unique=True),
+    sa.Column("product_id", sa.Integer, nullable=False),
     sa.Column("category_id", sa.Integer, nullable=False),
     sa.Column("category_name", sa.Unicode(50), nullable=False),       # gộp danh mục vào đây (star, không snowflake)
     sa.Column("title", sa.Unicode(200), nullable=False),
     sa.Column("condition", sa.String(20), nullable=False),
     sa.Column("list_price", sa.Numeric(10, 2), nullable=False),
-    sa.Column("current_status", sa.String(20), nullable=False),       # trạng thái HIỆN TẠI (SCD1)
+    sa.Column("current_status", sa.String(20), nullable=False),       # trạng thái tại phiên bản này (SCD2)
     sa.Column("listed_at", sa.DateTime, nullable=False),
+    sa.Column("source_updated_at", sa.DateTime, nullable=False),
+    sa.Column("effective_from", sa.DateTime, nullable=False),
+    sa.Column("effective_to", sa.DateTime),
+    sa.Column("is_current", sa.Boolean, nullable=False),
     sa.Column("etl_loaded_at", sa.DateTime, nullable=False),
+    sa.CheckConstraint(
+        "effective_to IS NULL OR effective_to > effective_from",
+        name="CHK_dim_product_effective_window",
+    ),
+    sa.CheckConstraint(
+        "(is_current = 1 AND effective_to IS NULL) OR "
+        "(is_current = 0 AND effective_to IS NOT NULL)",
+        name="CHK_dim_product_current_window",
+    ),
+    sa.Index(
+        "UX_dim_product_current",
+        "product_id",
+        unique=True,
+        mssql_where=sa.text("is_current = 1"),
+        sqlite_where=sa.text("is_current = 1"),
+    ),
+    sa.Index("IX_dim_product_natural_effective", "product_id", "effective_from"),
 )
 
 fact_transactions = sa.Table(

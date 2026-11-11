@@ -93,6 +93,7 @@ def transform_products(df: pd.DataFrame, categories: pd.DataFrame) -> pd.DataFra
         "list_price": merged["price"].astype("float64").round(2),
         "current_status": merged["status"],
         "listed_at": to_dt(merged["created_at"]),
+        "source_updated_at": to_dt(merged["updated_at"]),
     })
     return out
 

@@ -95,14 +95,14 @@ def test_incremental_picks_up_only_the_changes(oltp, dwh):
     snap = snapshot(dwh)
     new_user = snap["users"].set_index("user_id").loc[uid]
     assert (new_user.full_name, new_user.major, new_user.cohort_year) == ("Trần Văn Mới", "Khoa học máy tính", 2025)  # đã chuẩn hoá
-    assert snap["products"].set_index("product_id").loc[old, "current_status"] == "Hidden"   # thay đổi trạng thái được bắt
+    assert snap["products"].set_index("product_id").loc[old, "current_status"] == "Hidden"   # phiên bản hiện tại được cập nhật
     new_fact = snap["facts"].set_index("transaction_id").loc[tid]
     assert (new_fact.discount_pct, new_fact.is_completed, new_fact.transaction_date_key) == (10.0, 1, 20261109)
     assert scalar(dwh, "SELECT last_updated_at FROM etl_watermark WHERE source_table = 'transactions'") >= str(LATER)[:10]
 
 
 def test_incremental_result_equals_full_reload(oltp, dwh, tmp_path):
-    """Tính chất quan trọng nhất: nạp tăng dần cho kết quả GIỐNG HỆT nạp lại từ đầu."""
+    """Nạp tăng dần và nạp lại nguồn cho cùng trạng thái hiện hành và các fact."""
     pipeline.run_etl(oltp, dwh)
     add_activity(oltp)
     pipeline.run_etl(oltp, dwh)
@@ -136,12 +136,82 @@ def test_overlap_window_catches_late_committed_rows(oltp, dwh):
     assert pipeline.run_etl(oltp, dwh).loaded["fact_transactions"][0] == 1                       # mặc định 5 phút -> bắt được
 
 
-def test_category_rename_propagates_even_though_products_did_not_change(oltp, dwh):
+def test_category_rename_creates_new_current_product_versions(oltp, dwh):
     pipeline.run_etl(oltp, dwh)
     with oltp.begin() as c:
         c.execute(sa.update(gs.categories_t).where(gs.categories_t.c.category_id == 1).values(category_name="Sách giáo trình"))
     pipeline.run_etl(oltp, dwh)
-    assert scalar(dwh, "SELECT COUNT(*) FROM dim_product WHERE category_id = 1 AND category_name <> 'Sách giáo trình'") == 0
+    assert scalar(
+        dwh,
+        "SELECT COUNT(*) FROM dim_product WHERE category_id = 1 AND is_current = 1 "
+        "AND category_name <> 'Sách giáo trình'",
+    ) == 0
+    assert scalar(
+        dwh,
+        "SELECT COUNT(*) FROM dim_product WHERE category_id = 1 AND is_current = 0 "
+        "AND category_name = 'Sách giáo trình'",
+    ) == 0
+
+
+def test_product_attribute_changes_create_versions_and_facts_use_event_time(oltp, dwh):
+    pipeline.run_etl(oltp, dwh)
+    with oltp.begin() as c:
+        prior = c.execute(
+            sa.select(gs.transactions_t.c.transaction_id, gs.transactions_t.c.product_id)
+            .where(gs.transactions_t.c.transaction_date < LATER)
+            .limit(1)
+        ).one()
+        product = c.execute(
+            sa.select(gs.products_t.c.seller_id, gs.products_t.c.price)
+            .where(gs.products_t.c.product_id == prior.product_id)
+        ).one()
+        buyer_id = 1 if product.seller_id != 1 else 2
+        c.execute(
+            sa.update(gs.products_t)
+            .where(gs.products_t.c.product_id == prior.product_id)
+            .values(title="Sản phẩm phiên bản mới", updated_at=LATER)
+        )
+        next_transaction_id = c.scalar(sa.select(sa.func.max(gs.transactions_t.c.transaction_id))) + 1
+        c.execute(
+            sa.insert(gs.transactions_t).values(
+                transaction_id=next_transaction_id,
+                product_id=prior.product_id,
+                buyer_id=buyer_id,
+                amount=product.price,
+                status="Cancelled",
+                transaction_date=LATER + timedelta(seconds=1),
+                updated_at=LATER + timedelta(seconds=1),
+            )
+        )
+
+    pipeline.run_etl(oltp, dwh)
+
+    with dwh.connect() as c:
+        versions = query_df(
+            c,
+            "SELECT product_key, title, effective_from, effective_to, is_current "
+            "FROM dim_product WHERE product_id = :product_id ORDER BY effective_from",
+            product_id=prior.product_id,
+        )
+    assert len(versions) == 2
+    assert versions.iloc[0]["title"] != "Sản phẩm phiên bản mới"
+    assert versions.iloc[0]["is_current"] in (0, False)
+    assert versions.iloc[0]["effective_to"] == versions.iloc[1]["effective_from"]
+    assert versions.iloc[1]["title"] == "Sản phẩm phiên bản mới"
+    assert versions.iloc[1]["is_current"] in (1, True)
+
+    with dwh.connect() as c:
+        fact_keys = dict(
+            c.execute(
+                sa.text(
+                    "SELECT transaction_id, product_key FROM fact_transactions "
+                    "WHERE transaction_id IN (:old_id, :new_id)"
+                ),
+                {"old_id": prior.transaction_id, "new_id": next_transaction_id},
+            ).all()
+        )
+    assert fact_keys[prior.transaction_id] == versions.iloc[0]["product_key"]
+    assert fact_keys[next_transaction_id] == versions.iloc[1]["product_key"]
 
 
 # ---------------------------------------------------------------- dữ liệu xấu & lỗi
