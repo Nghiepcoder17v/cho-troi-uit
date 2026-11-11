@@ -1,6 +1,3 @@
-from conftest import register_and_login
-
-
 def create(client, headers, **over):
     body = {"category_id": 1, "title": "Sản phẩm", "price": 100000, "condition": "Good"}
     body.update(over)

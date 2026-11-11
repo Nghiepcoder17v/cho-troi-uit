@@ -1,5 +1,4 @@
 import pytest
-import sqlalchemy as sa
 
 import run_analytics as ra
 from etl import pipeline
