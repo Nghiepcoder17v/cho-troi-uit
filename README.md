@@ -130,14 +130,29 @@ cho-troi-uit/
 │   │   └── dwh_schema.py
 │   ├── analytics/
 │   └── tests/
+├── frontend/
+│   └── src/
+│       ├── App.tsx                 # app state/orchestration
+│       ├── pages/                  # Market, Sell, Account, Public Profile
+│       ├── components/             # shell, product, cart, auth, account UI
+│       ├── hooks/                  # shared React hooks
+│       └── utils/                  # shared formatting and helpers
 ├── database_scripts/
 │   ├── 01_init_schema.sql       # reset và tạo schema OLTP (dev only)
 │   ├── 02_seed_reference_data.sql
 │   └── migrations/
 │       ├── 20261110_purchase_requests.sql  # migration cộng thêm cho Step 4
-│       └── 20261110_reviews.sql            # migration cộng thêm cho Step 5
+│       ├── 20261110_reviews.sql            # migration cộng thêm cho Step 5
+│       ├── 20261111_dwh_product_scd2.sql   # lưu lịch sử dimension sản phẩm
+│       └── 20261111_student_id_length.sql  # chuẩn hóa MSSV 8 chữ số
 ├── docs/
+│   ├── DESIGN_PROFILE.md
 │   ├── api_contract.md
+│   ├── SQLSERVER_INTEGRATION_TESTING.md
+│   ├── DOCKER_COMPOSE.md
+│   ├── ETL_AUTOMATION.md
+│   ├── DWH_SCD2.md
+│   ├── CI.md
 │   ├── erd.dbml
 │   └── dwh_star_schema.dbml
 ├── .env.example
