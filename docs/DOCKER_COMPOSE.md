@@ -58,6 +58,9 @@ The default ETL run is incremental after its first load. It does not pass `--dro
 | `backend` | FastAPI API; waits for initialized database and health check | Internal 8000 |
 | `sqlserver` | SQL Server Developer with OLTP and DWH databases | `SQLSERVER_PORT` (1433) |
 | `etl`, `analytics` | One-shot data pipeline tools under the `tools` profile | None |
+| `etl-scheduler` | Recurring ETL with retry and run locking under the `automation` profile | None |
+
+The scheduler is disabled in the default web-app startup. Enable it with `--profile automation`; see [ETL automation](ETL_AUTOMATION.md).
 
 ## Step 8 verification record
 

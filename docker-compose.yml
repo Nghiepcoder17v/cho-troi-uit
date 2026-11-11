@@ -89,5 +89,29 @@ services:
         condition: service_completed_successfully
     profiles: ["tools"]
 
+  etl-scheduler:
+    build:
+      context: .
+      dockerfile: data_pipeline/Dockerfile
+    command: ["python", "scheduler.py"]
+    environment:
+      DATABASE_URL: "mssql+pyodbc://sa:${MSSQL_SA_PASSWORD}@sqlserver/ChoTroUIT?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+      DWH_DATABASE_URL: "mssql+pyodbc://sa:${MSSQL_SA_PASSWORD}@sqlserver/ChoTroUIT_DWH?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+      ETL_INTERVAL_SECONDS: ${ETL_INTERVAL_SECONDS:-3600}
+      ETL_RETRY_ATTEMPTS: ${ETL_RETRY_ATTEMPTS:-3}
+      ETL_RETRY_DELAY_SECONDS: ${ETL_RETRY_DELAY_SECONDS:-30}
+      ETL_MAX_RETRY_DELAY_SECONDS: ${ETL_MAX_RETRY_DELAY_SECONDS:-300}
+      ETL_OVERLAP_MINUTES: ${ETL_OVERLAP_MINUTES:-5}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    profiles: ["automation"]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   sqlserver-data:
