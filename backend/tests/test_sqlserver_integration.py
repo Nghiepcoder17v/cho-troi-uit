@@ -133,6 +133,18 @@ def test_sqlserver_schema_has_required_tables_columns_indexes_and_triggers(
     assert student_id_check is not None, "Missing CK_Users_StudentIdFormat."
     assert not student_id_check.is_disabled and not student_id_check.is_not_trusted
 
+    student_id_unique = connection.execute(
+        sa.text(
+            """
+            SELECT type_desc
+            FROM sys.key_constraints
+            WHERE parent_object_id = OBJECT_ID(N'dbo.USERS')
+              AND name = N'UQ_Users_StudentId'
+            """
+        )
+    ).scalar_one_or_none()
+    assert student_id_unique == "UNIQUE_CONSTRAINT", "Student ID uniqueness must remain enforced."
+
     active_product_index = connection.execute(
         sa.text(
             """
