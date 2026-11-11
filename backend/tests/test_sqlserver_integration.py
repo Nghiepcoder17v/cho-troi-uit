@@ -51,8 +51,8 @@ def sqlserver_connection():
 
 
 def _insert_user(connection: sa.Connection) -> int:
-    suffix = uuid.uuid4().hex[:7].upper()
-    student_id = f"T{suffix}"
+    suffix = int(uuid.uuid4().hex[:7], 16) % 10_000_000
+    student_id = f"9{suffix:07d}"
     return connection.execute(
         sa.text(
             """
@@ -119,6 +119,19 @@ def test_sqlserver_schema_has_required_tables_columns_indexes_and_triggers(
     assert required_columns <= actual_columns, (
         f"Missing SQL Server columns: {sorted(required_columns - actual_columns)}"
     )
+
+    student_id_check = connection.execute(
+        sa.text(
+            """
+            SELECT is_disabled, is_not_trusted
+            FROM sys.check_constraints
+            WHERE parent_object_id = OBJECT_ID(N'dbo.USERS')
+              AND name = N'CK_Users_StudentIdFormat'
+            """
+        )
+    ).first()
+    assert student_id_check is not None, "Missing CK_Users_StudentIdFormat."
+    assert not student_id_check.is_disabled and not student_id_check.is_not_trusted
 
     active_product_index = connection.execute(
         sa.text(
@@ -194,6 +207,29 @@ def test_sqlserver_updated_at_trigger_changes_timestamp(sqlserver_connection: sa
 
     assert before.year == 2000
     assert after > before, "TRG_Users_UpdatedAt did not refresh updated_at after an UPDATE."
+
+
+def test_sqlserver_rejects_student_ids_that_are_not_eight_digits(
+    sqlserver_connection: sa.Connection,
+):
+    with pytest.raises(IntegrityError):
+        sqlserver_connection.execute(
+            sa.text(
+                """
+                INSERT INTO dbo.USERS
+                    (student_id, email, password_hash, full_name, major)
+                VALUES
+                    (:student_id, :email, :password_hash, :full_name, :major)
+                """
+            ),
+            {
+                "student_id": "1234567",
+                "email": "1234567@gm.uit.edu.vn",
+                "password_hash": "integration-test-hash",
+                "full_name": "Invalid Student ID Test",
+                "major": "Kiem thu tich hop",
+            },
+        )
 
 
 def test_sqlserver_filtered_unique_index_only_blocks_active_transactions(

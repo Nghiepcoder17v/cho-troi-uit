@@ -42,7 +42,7 @@ class User(Base):
     )
 
     user_id = Column(Integer, primary_key=True, autoincrement=True)
-    student_id = Column(String(10), unique=True, nullable=False)
+    student_id = Column(String(8), unique=True, nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     password_hash = Column(String(100), nullable=False)
     full_name = Column(Unicode(100), nullable=False)

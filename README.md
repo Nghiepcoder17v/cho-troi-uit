@@ -533,7 +533,9 @@ ETL không bật mặc định. Xem [tài liệu Compose](docs/DOCKER_COMPOSE.md
 - Với OLTP cũ, sao lưu và kiểm tra migration đã áp dụng trước khi chạy. Migration
   purchase request và review lần lượt là
   `database_scripts/migrations/20261110_purchase_requests.sql` và
-  `database_scripts/migrations/20261110_reviews.sql`.
+  `database_scripts/migrations/20261110_reviews.sql`. Migration
+  `database_scripts/migrations/20261111_student_id_length.sql` chuẩn hóa MSSV
+  thành đúng 8 chữ số; script dừng nếu phát hiện dữ liệu cũ không hợp lệ.
 - Với DWH tạo trước SCD Type 2, sao lưu rồi áp dụng
   `database_scripts/migrations/20261111_dwh_product_scd2.sql` trước khi chạy ETL
   mới. Xem [hướng dẫn nâng cấp DWH](docs/DWH_SCD2.md).
