@@ -1,26 +1,14 @@
-import type { Category, Pagination, Product } from "../types";
-import { ProductCard } from "../components/ProductCard";
-import { EmptyState } from "../components/primitives";
+import type { Category } from "../types";
 
 type MarketPageProps = {
   categories: Category[];
-  products: Product[];
-  page: number;
-  pagination: Pagination;
   query: string;
-  categoryId?: number;
-  hasFeatured: boolean;
   onQueryChange: (value: string) => void;
   onSearch: () => void;
-  onCategoryChange: (value?: number) => void;
-  onPageChange: (value: number) => void;
-  onViewProduct: (product: Product) => void;
+  onExplore: (categoryId?: number) => void;
 };
 
-export function MarketPage({
-  categories, products, page, pagination, query, categoryId, hasFeatured,
-  onQueryChange, onSearch, onCategoryChange, onPageChange, onViewProduct,
-}: MarketPageProps) {
+export function MarketPage({ categories, query, onQueryChange, onSearch, onExplore }: MarketPageProps) {
   return <main>
     <section className="hero">
       <div className="hero-copy">
@@ -33,19 +21,9 @@ export function MarketPage({
       <div className="hero-art"><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /><div className="art-card"><span>NEW</span><strong>Find your<br />next thing.</strong><small>01 / 04</small></div></div>
     </section>
     <section className="section-block">
-      <div className="section-heading"><div><p className="eyebrow">Bắt đầu từ đâu?</p><h2>Khám phá theo danh mục</h2></div><button className="text-button" onClick={() => onCategoryChange(undefined)}>Xem tất cả <span>↗</span></button></div>
-      <div className="category-row">{categories.map((item, index) => <button className={`category-pill category-${index % 4}`} key={item.category_id} onClick={() => onCategoryChange(item.category_id)}><span>{["▦", "⌁", "⌨", "✦"][index % 4]}</span>{item.category_name}</button>)}</div>
+      <div className="section-heading"><div><p className="eyebrow">Bắt đầu từ đâu?</p><h2>Khám phá theo danh mục</h2></div><button className="text-button" onClick={() => onExplore()}>Xem tất cả <span>↗</span></button></div>
+      <div className="category-row">{categories.map((item, index) => <button className={`category-pill category-${index % 4}`} key={item.category_id} onClick={() => onExplore(item.category_id)}><span>{["▦", "⌁", "⌨", "✦"][index % 4]}</span>{item.category_name}</button>)}</div>
     </section>
-    <section className="section-block product-section">
-      <div className="section-heading"><div><p className="eyebrow">Mới đăng gần đây</p><h2>{categoryId ? categories.find((item) => item.category_id === categoryId)?.category_name : "Món đồ đang được tìm kiếm"}</h2></div><span className="result-count">{pagination.total_items} tin đăng</span></div>
-      <div className="product-grid">{products.map((product) => <ProductCard key={product.product_id} product={product} onView={() => onViewProduct(product)} />)}</div>
-      {pagination.total_pages > 1 && <nav className="pagination" aria-label="Phân trang sản phẩm">
-        <button type="button" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>← Trước</button>
-        <span>Trang {pagination.current_page} / {pagination.total_pages}</span>
-        <button type="button" disabled={page >= pagination.total_pages} onClick={() => onPageChange(Math.min(pagination.total_pages, page + 1))}>Sau →</button>
-      </nav>}
-      {!products.length && <EmptyState title="Chưa có sản phẩm phù hợp" description="Hãy thử từ khóa khác hoặc xóa bộ lọc danh mục." />}
-    </section>
-    {hasFeatured && <section className="wide-banner"><div><p className="eyebrow">Dành cho bạn</p><h2>Một vòng quanh chợ,<br />một món đồ vừa ý.</h2><button className="dark-button" onClick={() => onQueryChange("")}>Xem thêm sản phẩm <span>↗</span></button></div><div className="banner-shape">✳</div></section>}
+    <section className="wide-banner"><div><p className="eyebrow">Dành cho bạn</p><h2>Một vòng quanh chợ,<br />một món đồ vừa ý.</h2><button className="dark-button" onClick={() => onExplore()}>Xem sản phẩm <span>↗</span></button></div><div className="banner-shape">✳</div></section>
   </main>;
 }

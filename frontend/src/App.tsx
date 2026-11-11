@@ -5,6 +5,7 @@ import { CartDrawer } from "./components/CartDrawer";
 import { AuthModal } from "./components/AuthModal";
 import { AccountView } from "./pages/AccountPage";
 import { MarketPage } from "./pages/MarketPage";
+import { ExplorePage } from "./pages/ExplorePage";
 import { PublicProfilePage } from "./pages/PublicProfilePage";
 import { SellPage } from "./pages/SellPage";
 import {
@@ -30,12 +31,13 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<AppView>("market");
   const [publicProfileUserId, setPublicProfileUserId] = useState<number | null>(null);
-  const [publicProfileReturnView, setPublicProfileReturnView] = useState<"market" | "account" | "public-profile">("market");
+  const [publicProfileReturnView, setPublicProfileReturnView] = useState<"market" | "explore" | "account" | "public-profile">("market");
   const { theme, toggleTheme } = useTheme();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [query, setQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
   const [category, setCategory] = useState<number | undefined>();
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
@@ -51,15 +53,19 @@ function App() {
   const [showCart, setShowCart] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   const refreshProducts = async () => {
+    setLoadingProducts(true);
     try {
       setError("");
-      const result = await listProducts({ q: query, category_id: category, page });
+      const result = await listProducts({ q: submittedQuery, category_id: category, page });
       setProducts(result.data);
       setPagination(result.pagination ?? { current_page: page, page_size: 12, total_items: result.data.length, total_pages: 1 });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể tải sản phẩm");
+    } finally {
+      setLoadingProducts(false);
     }
   };
 
@@ -77,13 +83,35 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (view === "market") void refreshProducts();
+    if (view === "explore") void refreshProducts();
     if (view === "account" && user) void Promise.all([getMyProducts(), getPurchases(), getSales()]).then(([mine, bought, sold]) => {
       setMyProducts(mine);
       setPurchases(bought);
       setSales(sold);
     }).catch((reason) => setError(reason instanceof Error ? reason.message : "Không thể tải tài khoản"));
-  }, [view, category, page]);
+  }, [view, category, page, submittedQuery]);
+
+  const searchProducts = () => {
+    const nextQuery = query.trim();
+    if (view === "explore" && page === 1 && submittedQuery === nextQuery) void refreshProducts();
+    setSubmittedQuery(nextQuery);
+    setPage(1);
+    setView("explore");
+  };
+
+  const exploreCategory = (categoryId?: number) => {
+    setCategory(categoryId);
+    setPage(1);
+    setView("explore");
+  };
+
+  const clearExploreFilters = () => {
+    setQuery("");
+    setSubmittedQuery("");
+    setCategory(undefined);
+    setPage(1);
+    if (view === "explore" && page === 1 && submittedQuery === "" && category === undefined) void refreshProducts();
+  };
 
   const refreshAccount = async () => {
     const [mine, bought, sold] = await Promise.all([getMyProducts(), getPurchases(), getSales()]);
@@ -135,7 +163,7 @@ function App() {
   const openPublicProfile = (userId: number) => {
     const returnView = view === "public-profile"
       ? publicProfileReturnView
-      : view === "account" ? "account" : "market";
+      : view === "account" ? "account" : view === "explore" ? "explore" : "market";
     setPublicProfileReturnView(returnView);
     setPublicProfileUserId(userId);
     setSelectedProduct(null);
@@ -234,15 +262,23 @@ function App() {
     >
       {view === "market" && <MarketPage
         categories={categories}
+        query={query}
+        onQueryChange={setQuery}
+        onSearch={searchProducts}
+        onExplore={exploreCategory}
+      />}
+      {view === "explore" && <ExplorePage
+        categories={categories}
         products={products}
         page={page}
         pagination={pagination}
         query={query}
         categoryId={category}
-        hasFeatured={products.length > 0}
+        loading={loadingProducts}
         onQueryChange={setQuery}
-        onSearch={() => (page !== 1 ? setPage(1) : void refreshProducts())}
-        onCategoryChange={(value) => { setCategory(value); setPage(1); }}
+        onSearch={searchProducts}
+        onCategoryChange={exploreCategory}
+        onClearFilters={clearExploreFilters}
         onPageChange={setPage}
         onViewProduct={setSelectedProduct}
       />}
