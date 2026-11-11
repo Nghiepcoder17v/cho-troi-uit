@@ -74,7 +74,7 @@ flowchart LR
 | Mở rộng — Analytics theo danh mục | Hoàn thành; báo cáo `listing_sell_through_by_category` |
 | Step 11 — Cookie phiên và xóa giỏ hàng | Đã merge qua PR #16; luồng đăng nhập, thêm giỏ, đăng xuất đã kiểm tra bằng Chrome headless trên môi trường test |
 | Step 12 — Tài liệu và metadata repository | Tài liệu đã merge qua PR #17; description/topics GitHub còn chờ cập nhật |
-| Step 13 — Backend cleanup và MSSV 8 chữ số | Đã merge qua PR #21; migration chạy lặp thành công và 4 SQL Server integration tests qua trên `ChoTroUIT_Step7_Test`; bản sửa constraint đang ở PR #23. Chưa áp migration lên DB ứng dụng |
+| Step 13 — Backend cleanup và MSSV 8 chữ số | Đã merge qua PR #21; migration đã áp dụng sau backup được verify trên database OLTP cục bộ; 10.001 MSSV hợp lệ, CHECK/UNIQUE được xác nhận. 4 SQL Server integration tests qua trên `ChoTroUIT_Step7_Test`; bản sửa migration đang ở PR #23 |
 | Step 14 — Tách frontend | Đã merge qua PR #21; frontend build đã thành công |
 | Step 15 — SQLite datetime adapter | Đã merge qua PR #21; 64 pipeline tests qua với DeprecationWarning được nâng thành lỗi |
 
@@ -594,14 +594,14 @@ ETL không bật mặc định. Xem [tài liệu Compose](docs/DOCKER_COMPOSE.md
 - [x] Mở rộng analytics: sell-through và trạng thái listing theo danh mục.
 - [x] Step 11: cookie phiên bảo mật và logout xóa giỏ hàng; [PR #16](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/16) đã merge. Luồng đăng nhập, thêm sản phẩm vào giỏ và đăng xuất đã kiểm tra bằng Chrome headless trên môi trường test.
 - [x] Step 12: đồng bộ quy trình Git và ghi chú database; [PR #17](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/17) đã merge. Description/topics GitHub còn cần cập nhật.
-- [x] Step 13: helper reputation và MSSV 8 chữ số; đã merge lên `main` qua [PR #21](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/21). Migration đã chạy hai lần trên database test, giữ nguyên UNIQUE/CHECK; 4 SQL Server integration tests qua. Bản sửa migration ở [PR #23](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/23). Chưa áp dụng lên database ứng dụng.
+- [x] Step 13: helper reputation và MSSV 8 chữ số; đã merge lên `main` qua [PR #21](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/21). Migration đã chạy hai lần trên database test và áp dụng trên database OLTP cục bộ sau backup `COPY_ONLY` được verify; 10.001 MSSV hợp lệ, CHECK/UNIQUE được xác nhận. 4 SQL Server integration tests qua. Bản sửa migration ở [PR #23](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/23).
 - [x] Step 14: tách App thành pages/components; đã merge lên `main` qua [PR #21](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/21).
 - [x] Step 15: adapter/converter datetime SQLite tường minh; 64 pipeline tests qua với DeprecationWarning là lỗi; đã merge qua [PR #21](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/21).
 
-Các thay đổi kỹ thuật Step 11–15 đã nằm trên `main`. Luồng trình duyệt và
-SQL Server test database đã được xác minh. Việc đóng toàn bộ hạng mục bàn giao
-còn phụ thuộc vào cập nhật metadata GitHub và kế hoạch áp migration lên database
-ứng dụng. Phân quyền vai trò quản trị
+Các thay đổi kỹ thuật Step 11–15 đã nằm trên `main`. Luồng trình duyệt,
+SQL Server test database và migration trên database OLTP cục bộ đã được xác
+minh. Việc đóng toàn bộ hạng mục bàn giao còn phụ thuộc vào review/merge PR #23
+và cập nhật metadata GitHub. Phân quyền vai trò quản trị
 (admin/moderator) và kiểm duyệt tin vi phạm là đề xuất chưa được duyệt phạm vi;
 không nhầm mục này với tính năng chủ sở hữu quản lý tin đã có ở Account Center.
 
