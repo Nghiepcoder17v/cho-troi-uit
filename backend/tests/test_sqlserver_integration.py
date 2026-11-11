@@ -171,7 +171,6 @@ def test_sqlserver_updated_at_trigger_changes_timestamp(sqlserver_connection: sa
     connection = sqlserver_connection
     user_id = _insert_user(connection)
 
-    old_timestamp = sa.literal_column("CONVERT(DATETIME2(0), '2000-01-01T00:00:00')")
     connection.execute(
         sa.text(
             "UPDATE dbo.USERS SET updated_at = CONVERT(DATETIME2(0), "

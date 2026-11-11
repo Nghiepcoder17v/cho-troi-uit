@@ -157,8 +157,6 @@ def build_dataset(n_users: int, n_products: int, n_tx: int, end: datetime, seed:
 
     start = end - timedelta(days=365)
     all_days = [(start + timedelta(days=i)).date() for i in range(366)]
-    end_day = end.date()
-
     # ---- USERS: đăng ký trải từ 120 ngày trước start tới end; 3 người đầu chắc chắn có từ trước start
     user_days = [(start - timedelta(days=120) + timedelta(days=i)).date() for i in range(486)]
     user_w = [MONTH_WEIGHT[d.month] for d in user_days]

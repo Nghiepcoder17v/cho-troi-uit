@@ -24,6 +24,7 @@ phân tích hành vi giao dịch.
 - [Sinh và kiểm tra dữ liệu](#sinh-và-kiểm-tra-dữ-liệu)
 - [Chạy ETL và analytics](#chạy-etl-và-analytics)
 - [Tự động chạy ETL](#tự-động-chạy-etl)
+- [CI và chất lượng code](#ci-và-chất-lượng-code)
 - [API chính](#api-chính)
 - [Thiết kế dữ liệu](#thiết-kế-dữ-liệu)
 - [Kiểm thử](#kiểm-thử)
@@ -320,6 +321,10 @@ retry lỗi với backoff cấu hình được, giữ khóa ứng dụng SQL Ser
 instance chạy ETL đồng thời. Upsert và transaction watermark hiện có giúp lần
 chạy lại không nạp trùng fact/dimension. Xem [hướng dẫn vận hành](docs/ETL_AUTOMATION.md).
 
+## CI và chất lượng code
+
+GitHub Actions tự chạy backend tests, data pipeline tests, Ruff lint và frontend build khi có Pull Request. SQL Server integration tests cần database riêng có hậu tố `_test` nên được giữ opt-in. Xem [tài liệu CI](docs/CI.md).
+
 ## API chính
 
 Chi tiết request/response nằm trong [`docs/api_contract.md`](docs/api_contract.md).
@@ -472,9 +477,9 @@ và lệnh vận hành nằm tại [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.
 - [x] Hoàn tất kiểm thử tích hợp SQL Server, pipeline, build và smoke test Step 7 ([kết quả](docs/SQLSERVER_INTEGRATION_TESTING.md)).
 - [x] Thêm và kiểm chứng Docker Compose cho OLTP, DWH, API, frontend và ETL ([hướng dẫn và kết quả](docs/DOCKER_COMPOSE.md)).
 - [x] Lập lịch chạy ETL tự động bằng Compose, quản lý retry và trạng thái ([Step 9](docs/ETL_AUTOMATION.md)).
+- [x] Thiết lập CI chạy test và kiểm tra chất lượng code ([Step 10](docs/CI.md)).
 - [ ] Bổ sung phân quyền và quản lý tin đăng.
 - [ ] Nâng dimension cần thiết lên SCD Type 2 để lưu lịch sử.
-- [ ] Thêm CI chạy test và kiểm tra chất lượng code.
 
 ## Quy trình Git đề xuất
 
