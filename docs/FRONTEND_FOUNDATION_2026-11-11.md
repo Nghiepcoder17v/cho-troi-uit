@@ -30,4 +30,4 @@
 
 ## Review notes
 
-The audit and implementation files are committed locally on `feat/frontend-foundation`. The pre-existing user-owned `frontend/src/components/ui/` directory remains untracked and was excluded from the commit. The repository's current GitHub default branch is five commits ahead of the original local baseline, with README as the only file changed in that range; no open PRs were found during FE-0. The branch has not been pushed and no PR has been opened: automatic approval review rejected the push because it would share project source with GitHub without specific authorization.
+The audit and implementation changes are pushed on `feat/frontend-foundation` in [PR #26](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/26), targeting `main`. The pre-existing user-owned `frontend/src/components/ui/` directory remains untracked and was excluded from the commit. The repository's current GitHub default branch was five commits ahead of the original local baseline, with README as the only file changed in that range. Check PR #26 for the latest CI and review state.
