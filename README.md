@@ -305,6 +305,9 @@ Các báo cáo hiện có:
 | `books_peak_month` | Tháng cao điểm của giao dịch giáo trình |
 | `days_to_sell_by_category` | Thời gian bán và mức giảm giá theo danh mục |
 | `seller_pareto` | Tỷ trọng doanh thu lũy kế của người bán |
+| `listing_sell_through_by_category` | Tồn tin theo trạng thái, doanh thu hoàn tất và tỷ lệ sell-through theo danh mục |
+
+Sell-through được tính bằng số tin có giao dịch `Completed` chia cho tổng số tin trong danh mục. Báo cáo nhóm theo danh mục hiện hành; trạng thái lịch sử và khóa fact được giữ trong `dim_product` SCD Type 2.
 
 ## Tự động chạy ETL
 

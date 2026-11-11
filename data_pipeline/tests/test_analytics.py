@@ -58,6 +58,59 @@ def test_seller_pareto_is_cumulative_and_monotonic(loaded):
     assert got["revenue"].is_monotonic_decreasing
 
 
+def test_listing_sell_through_matches_independent_oltp_aggregation(loaded):
+    oltp, dwh = loaded
+    with oltp.connect() as c:
+        ref = query_df(
+            c,
+            """
+            WITH completed_sales AS (
+                SELECT product_id,
+                       COUNT(DISTINCT transaction_id) AS completed_sales,
+                       SUM(amount) AS completed_revenue
+                FROM transactions
+                WHERE status = 'Completed'
+                GROUP BY product_id
+            )
+            SELECT c.category_id, c.category_name,
+                   COUNT(*) AS total_listings,
+                   SUM(CASE WHEN p.status = 'Available' THEN 1 ELSE 0 END) AS available_listings,
+                   SUM(CASE WHEN p.status = 'Reserved' THEN 1 ELSE 0 END) AS reserved_listings,
+                   SUM(CASE WHEN p.status = 'Sold' THEN 1 ELSE 0 END) AS sold_listings,
+                   SUM(CASE WHEN p.status = 'Hidden' THEN 1 ELSE 0 END) AS hidden_listings,
+                   SUM(COALESCE(s.completed_sales, 0)) AS completed_sales,
+                   SUM(COALESCE(s.completed_revenue, 0)) AS completed_revenue,
+                   ROUND(100.0 * SUM(CASE WHEN COALESCE(s.completed_sales, 0) > 0 THEN 1 ELSE 0 END) / COUNT(*), 2)
+                       AS sell_through_pct,
+                   ROUND(AVG(CASE WHEN p.status = 'Available' THEN p.price END), 2)
+                       AS avg_available_list_price
+            FROM products p
+            JOIN categories c ON c.category_id = p.category_id
+            LEFT JOIN completed_sales s ON s.product_id = p.product_id
+            GROUP BY c.category_id, c.category_name
+            """,
+        )
+    with dwh.connect() as c:
+        got = ra.run_query(c, "listing_sell_through_by_category")
+
+    metrics = [
+        "total_listings",
+        "available_listings",
+        "reserved_listings",
+        "sold_listings",
+        "hidden_listings",
+        "completed_sales",
+        "completed_revenue",
+        "sell_through_pct",
+    ]
+    expected_by_category = ref.set_index("category_id")[metrics].sort_index()
+    actual_by_category = got.set_index("category_id")[metrics].sort_index()
+    assert actual_by_category.to_dict("index") == expected_by_category.to_dict("index")
+    assert got["avg_available_list_price"].tolist() == ref.set_index("category_id").loc[
+        got["category_id"], "avg_available_list_price"
+    ].tolist()
+
+
 def test_comment_lines_cannot_break_parameter_binding(loaded, tmp_path, monkeypatch):
     _, dwh = loaded
     (tmp_path / "q.sql").write_text("-- ví dụ :cat_books trong chú thích\nSELECT 1 AS x;", encoding="utf-8")
