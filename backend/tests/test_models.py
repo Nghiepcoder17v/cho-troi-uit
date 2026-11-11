@@ -11,6 +11,10 @@ def make_user(**over):
     return models.User(**d)
 
 
+def test_student_id_column_matches_eight_digit_business_rule():
+    assert models.User.__table__.c.student_id.type.length == 8
+
+
 def test_email_domain_check_is_anchored(session_factory):
     with session_factory() as s:
         s.add(make_user(email="25520001@gm.uit.edu.vn.evil.com"))

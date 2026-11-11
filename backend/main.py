@@ -320,11 +320,7 @@ def list_user_reviews(user_id: int, db: Session = Depends(get_db)):
     return {"status": "success", "data": data}
 
 
-@app.get("/api/users/{user_id}/reputation", response_model=schemas.SellerReputationEnvelope)
-def get_seller_reputation(user_id: int, db: Session = Depends(get_db)):
-    if db.get(models.User, user_id) is None:
-        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
-
+def _compute_reputation(db: Session, user_id: int) -> dict[str, object]:
     total_sales = db.scalar(
         select(func.count(models.Transaction.transaction_id))
         .join(models.Product, models.Transaction.product_id == models.Product.product_id)
@@ -381,17 +377,21 @@ def get_seller_reputation(user_id: int, db: Session = Depends(get_db)):
         else f"{score:.1f}/5 từ {review_count} đánh giá"
     )
     return {
-        "status": "success",
-        "data": {
-            "user_id": user_id,
-            "score": score,
-            "review_count": review_count,
-            "rating_distribution": distribution,
-            "completed_sales": completed_sales,
-            "total_sales": total_sales,
-            "label": label,
-        },
+        "user_id": user_id,
+        "score": score,
+        "review_count": review_count,
+        "rating_distribution": distribution,
+        "completed_sales": completed_sales,
+        "total_sales": total_sales,
+        "label": label,
     }
+
+
+@app.get("/api/users/{user_id}/reputation", response_model=schemas.SellerReputationEnvelope)
+def get_seller_reputation(user_id: int, db: Session = Depends(get_db)):
+    if db.get(models.User, user_id) is None:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+    return {"status": "success", "data": _compute_reputation(db, user_id)}
 
 
 @app.get("/api/users/{user_id}/public-profile", response_model=schemas.PublicProfileEnvelope)
@@ -400,7 +400,7 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db)):
     if user is None:
         raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
 
-    reputation = get_seller_reputation(user_id, db)["data"]
+    reputation = _compute_reputation(db, user_id)
     return {
         "status": "success",
         "data": {
