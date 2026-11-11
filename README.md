@@ -23,6 +23,7 @@ phân tích hành vi giao dịch.
 - [Chạy bằng Docker Compose](#chạy-bằng-docker-compose)
 - [Sinh và kiểm tra dữ liệu](#sinh-và-kiểm-tra-dữ-liệu)
 - [Chạy ETL và analytics](#chạy-etl-và-analytics)
+- [Tự động chạy ETL](#tự-động-chạy-etl)
 - [API chính](#api-chính)
 - [Thiết kế dữ liệu](#thiết-kế-dữ-liệu)
 - [Kiểm thử](#kiểm-thử)
@@ -92,6 +93,7 @@ cho-troi-uit/
 │   ├── generate_seed.py         # sinh dữ liệu phát triển
 │   ├── validate_seed.py         # kiểm tra dữ liệu nguồn
 │   ├── run_etl.py               # entry point ETL
+│   ├── scheduler.py             # lịch ETL, retry và khóa run
 │   ├── run_analytics.py         # chạy truy vấn phân tích
 │   ├── etl/
 │   │   ├── extract.py
@@ -302,6 +304,22 @@ Các báo cáo hiện có:
 | `days_to_sell_by_category` | Thời gian bán và mức giảm giá theo danh mục |
 | `seller_pareto` | Tỷ trọng doanh thu lũy kế của người bán |
 
+## Tự động chạy ETL
+
+Compose có scheduler tùy chọn, chạy ngay một lượt khi khởi động rồi lặp lại theo
+`ETL_INTERVAL_SECONDS` (mặc định 3600 giây). Bật scheduler riêng để không làm
+thay đổi hành vi chạy app thông thường:
+
+```powershell
+docker compose --env-file .env.compose --profile automation up -d etl-scheduler
+docker compose --env-file .env.compose logs -f etl-scheduler
+```
+
+Watermark, trạng thái từng lần chạy và dòng bị từ chối được ghi ở DWH. Scheduler
+retry lỗi với backoff cấu hình được, giữ khóa ứng dụng SQL Server để ngăn nhiều
+instance chạy ETL đồng thời. Upsert và transaction watermark hiện có giúp lần
+chạy lại không nạp trùng fact/dimension. Xem [hướng dẫn vận hành](docs/ETL_AUTOMATION.md).
+
 ## API chính
 
 Chi tiết request/response nằm trong [`docs/api_contract.md`](docs/api_contract.md).
@@ -433,7 +451,7 @@ và lệnh vận hành nằm tại [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.
 ## Bảo mật và toàn vẹn dữ liệu
 
 - Mật khẩu chỉ được lưu dưới dạng bcrypt hash.
-- JWT secret và connection strings chỉ nằm trong `.env`.
+- JWT secret và connection strings chỉ nằm trong `.env` hoặc `.env.compose` cục bộ; không commit các file này.
 - API không nhận `seller_id` hoặc `buyer_id` từ client; các giá trị này lấy từ
   token.
 - SQL Server dùng foreign key, CHECK constraint và unique constraint.
@@ -453,7 +471,7 @@ và lệnh vận hành nằm tại [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.
 - [x] Tổ chức lại Account Center thành các khu vực riêng và trang cá nhân công khai (Step 6).
 - [x] Hoàn tất kiểm thử tích hợp SQL Server, pipeline, build và smoke test Step 7 ([kết quả](docs/SQLSERVER_INTEGRATION_TESTING.md)).
 - [x] Thêm và kiểm chứng Docker Compose cho OLTP, DWH, API, frontend và ETL ([hướng dẫn và kết quả](docs/DOCKER_COMPOSE.md)).
-- [ ] Lập lịch chạy ETL tự động.
+- [x] Lập lịch chạy ETL tự động bằng Compose, quản lý retry và trạng thái ([Step 9](docs/ETL_AUTOMATION.md)).
 - [ ] Bổ sung phân quyền và quản lý tin đăng.
 - [ ] Nâng dimension cần thiết lên SCD Type 2 để lưu lịch sử.
 - [ ] Thêm CI chạy test và kiểm tra chất lượng code.
