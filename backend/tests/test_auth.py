@@ -56,12 +56,30 @@ def test_register_duplicate_returns_409(client):
     assert reg(client).status_code == 409
 
 
-def test_login_success_returns_token(client):
+def test_login_sets_http_only_cookie_without_returning_token(client):
     reg(client)
     r = client.post("/api/auth/login", json={"email": "25520001@gm.uit.edu.vn", "password": "Matkhau123"})
     assert r.status_code == 200
     data = r.json()["data"]
-    assert data["token"] and data["major"] == "Kỹ thuật phần mềm"
+    assert "token" not in data and data["major"] == "Kỹ thuật phần mềm"
+    set_cookie = r.headers["set-cookie"].lower()
+    assert "httponly" in set_cookie
+    assert "secure" in set_cookie
+    assert "samesite=lax" in set_cookie
+    assert r.cookies.get("access_token")
+
+
+def test_logout_clears_cookie_and_rejects_untrusted_origin(client):
+    headers = register_and_login(client, "25520007")
+
+    denied = client.post("/api/auth/logout", headers={**headers, "Origin": "https://attacker.example"})
+    assert denied.status_code == 403
+    assert client.get("/api/users/me", headers=headers).status_code == 200
+
+    response = client.post("/api/auth/logout", headers=headers)
+    assert response.status_code == 200
+    assert "max-age=0" in response.headers["set-cookie"].lower()
+    assert client.get("/api/users/me").status_code == 401
 
 
 def test_login_wrong_password_and_unknown_email_look_the_same(client):

@@ -2,8 +2,9 @@ import math
 import os
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import case, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload
@@ -11,7 +12,14 @@ from sqlalchemy.orm import Session, aliased, joinedload
 import models
 import schemas
 from database import get_db
-from security import create_access_token, get_current_user, hash_password, verify_password
+from security import (
+    ACCESS_TOKEN_COOKIE_NAME,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    create_access_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
 
 # Lưu ý: backend KHÔNG tạo bảng. Schema nằm ở database_scripts/01_init_schema.sql
 
@@ -33,6 +41,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def protect_cookie_authenticated_requests(request: Request, call_next):
+    # SameSite=Lax blocks cross-site POSTs. Origin validation also blocks
+    # same-site requests from an untrusted sibling origin.
+    if (
+        request.method not in _SAFE_METHODS
+        and request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
+        and request.headers.get("origin") not in cors_origins
+    ):
+        return JSONResponse(status_code=403, content={"detail": "Origin không được phép"})
+    return await call_next(request)
 
 
 @app.get("/")
@@ -74,16 +97,34 @@ def register(body: schemas.RegisterRequest, db: Session = Depends(get_db)):
     return {"status": "success", "message": "Đăng ký thành công", "data": user}
 
 
-@app.post("/api/auth/login", response_model=schemas.TokenEnvelope)
-def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
+@app.post("/api/auth/login", response_model=schemas.SessionEnvelope)
+def login(body: schemas.LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.scalar(select(models.User).where(models.User.email == body.email))
     # Cùng một thông báo cho "sai email" và "sai mật khẩu" để không lộ email nào đã đăng ký
     if not verify_password(body.password, user.password_hash if user else None):
         raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
-    return {
-        "status": "success",
-        "data": {"token": create_access_token(user.user_id), "user_id": user.user_id, "major": user.major},
-    }
+    response.set_cookie(
+        key=ACCESS_TOKEN_COOKIE_NAME,
+        value=create_access_token(user.user_id),
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/",
+    )
+    return {"status": "success", "data": {"user_id": user.user_id, "major": user.major}}
+
+
+@app.post("/api/auth/logout", response_model=schemas.MessageEnvelope)
+def logout(response: Response):
+    response.delete_cookie(
+        key=ACCESS_TOKEN_COOKIE_NAME,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/",
+    )
+    return {"status": "success", "message": "Đã đăng xuất thành công."}
 
 
 @app.get("/api/users/me", response_model=schemas.UserEnvelope)

@@ -5,7 +5,7 @@ Tài liệu này quy định các cổng giao tiếp giữa Frontend và Backend
 ## Quy ước chung
 
 - Dữ liệu vào/ra là JSON. Thành công luôn có dạng `{"status": "success", "data": ..., "message"?: ...}`.
-- API cần đăng nhập phải gửi header `Authorization: Bearer <token>`. Danh tính (`seller_id`, `buyer_id`) **luôn lấy từ token**, không nhận từ client.
+- API cần đăng nhập dùng JWT trong cookie `access_token` do backend đặt với các cờ `HttpOnly`, `Secure`, `SameSite=Lax`. Frontend gửi cookie bằng `credentials: "include"`; token không xuất hiện trong JSON hoặc JavaScript storage. Danh tính (`seller_id`, `buyer_id`) **luôn lấy từ token**, không nhận từ client.
 - Lỗi theo chuẩn FastAPI: `{"detail": "<thông báo>"}` (lỗi validate `422` có `detail` là danh sách chi tiết từng trường).
 - Thời gian là **UTC**, định dạng ISO-8601. Tiền (VND) trả về dạng **số**, không phải chuỗi.
 
@@ -47,13 +47,18 @@ Lỗi: `409` (email/MSSV đã tồn tại), `422` (sai định dạng).
 ```
 **200 OK**
 ```json
-{ "status": "success",
-  "data": { "token": "eyJhbGciOi...", "token_type": "bearer", "user_id": 1, "major": "Hệ thống thông tin" } }
+{ "status": "success", "data": { "user_id": 1, "major": "Hệ thống thông tin" } }
 ```
+Đồng thời trả `Set-Cookie: access_token=...; HttpOnly; Secure; SameSite=Lax; Path=/`.
 Lỗi: `401` (sai email hoặc mật khẩu — cùng một thông báo cho cả hai).
 
+### Đăng xuất — `POST /api/auth/logout`
+Xóa cookie phiên bằng `Set-Cookie` hết hạn. Khi gửi từ trình duyệt, request phải
+có `Origin` nằm trong `CORS_ORIGINS`; cookie được gửi tự động cùng request.
+
 ### Thông tin tài khoản — `GET /api/users/me` 🔒
-Trả về thông tin tài khoản hiện tại, gồm email và MSSV; endpoint này yêu cầu JWT.
+Trả về thông tin tài khoản hiện tại, gồm email và MSSV; endpoint này yêu cầu
+cookie phiên hợp lệ.
 
 ### Cập nhật hồ sơ cá nhân — `PATCH /api/users/me` 🔒
 Chỉ cập nhật `full_name` và `major`; email và MSSV không thể thay đổi qua endpoint

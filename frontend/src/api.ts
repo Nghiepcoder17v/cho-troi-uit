@@ -17,12 +17,11 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 type Envelope<T> = { status: string; data: T; message?: string; pagination?: Pagination };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = localStorage.getItem("access_token");
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   });
@@ -59,11 +58,15 @@ export async function register(body: {
   })).data;
 }
 
-export async function login(email: string, password: string): Promise<{ token: string; user_id: number }> {
-  return (await request<Envelope<{ token: string; user_id: number }>>("/api/auth/login", {
+export async function login(email: string, password: string): Promise<{ user_id: number; major?: string | null }> {
+  return (await request<Envelope<{ user_id: number; major?: string | null }>>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   })).data;
+}
+
+export async function logout(): Promise<void> {
+  await request("/api/auth/logout", { method: "POST" });
 }
 
 export async function getMe(): Promise<User> {

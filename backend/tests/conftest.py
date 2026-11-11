@@ -48,7 +48,7 @@ def client(session_factory):
             db.close()
 
     app.dependency_overrides[get_db] = _get_db
-    with TestClient(app) as c:
+    with TestClient(app, base_url="https://testserver", headers={"Origin": "http://localhost:5173"}) as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -67,7 +67,10 @@ def register_and_login(client, student_id="25520001", password="Matkhau123", maj
     assert r.status_code == 201, r.text
     r = client.post("/api/auth/login", json={"email": f"{student_id}@gm.uit.edu.vn", "password": password})
     assert r.status_code == 200, r.text
-    return {"Authorization": f"Bearer {r.json()['data']['token']}"}
+    token = r.cookies.get("access_token")
+    assert token, "Login must set the HttpOnly access-token cookie"
+    client.cookies.delete("access_token")
+    return {"Cookie": f"access_token={token}", "Origin": "http://localhost:5173"}
 
 
 @pytest.fixture()
