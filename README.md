@@ -25,6 +25,7 @@ phân tích hành vi giao dịch.
 - [Chạy ETL và analytics](#chạy-etl-và-analytics)
 - [Tự động chạy ETL](#tự-động-chạy-etl)
 - [CI và chất lượng code](#ci-và-chất-lượng-code)
+- [Lịch sử dimension sản phẩm](#lịch-sử-dimension-sản-phẩm)
 - [API chính](#api-chính)
 - [Thiết kế dữ liệu](#thiết-kế-dữ-liệu)
 - [Kiểm thử](#kiểm-thử)
@@ -318,12 +319,16 @@ docker compose --env-file .env.compose logs -f etl-scheduler
 
 Watermark, trạng thái từng lần chạy và dòng bị từ chối được ghi ở DWH. Scheduler
 retry lỗi với backoff cấu hình được, giữ khóa ứng dụng SQL Server để ngăn nhiều
-instance chạy ETL đồng thời. Upsert và transaction watermark hiện có giúp lần
-chạy lại không nạp trùng fact/dimension. Xem [hướng dẫn vận hành](docs/ETL_AUTOMATION.md).
+instance chạy ETL đồng thời. Lần chạy lại không tạo fact trùng hoặc phiên bản
+dimension mới nếu thuộc tính không đổi. Xem [hướng dẫn vận hành](docs/ETL_AUTOMATION.md).
 
 ## CI và chất lượng code
 
 GitHub Actions tự chạy backend tests, data pipeline tests, Ruff lint và frontend build khi có Pull Request. SQL Server integration tests cần database riêng có hậu tố `_test` nên được giữ opt-in. Xem [tài liệu CI](docs/CI.md).
+
+## Lịch sử dimension sản phẩm
+
+Data Warehouse lưu phiên bản lịch sử của tin đăng trong `dim_product`; fact gắn với phiên bản có hiệu lực tại thời điểm giao dịch. Khi nâng DWH cũ, áp dụng migration trước khi chạy ETL. Xem [hướng dẫn SCD Type 2](docs/DWH_SCD2.md).
 
 ## API chính
 
@@ -479,7 +484,7 @@ và lệnh vận hành nằm tại [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.
 - [x] Lập lịch chạy ETL tự động bằng Compose, quản lý retry và trạng thái ([Step 9](docs/ETL_AUTOMATION.md)).
 - [x] Thiết lập CI chạy test và kiểm tra chất lượng code ([Step 10](docs/CI.md)).
 - [ ] Bổ sung phân quyền và quản lý tin đăng.
-- [ ] Nâng dimension cần thiết lên SCD Type 2 để lưu lịch sử.
+- [x] Nâng `dim_product` lên SCD Type 2 để lưu thuộc tính tin đăng theo thời gian ([Step tiếp theo](docs/DWH_SCD2.md)).
 
 ## Quy trình Git đề xuất
 

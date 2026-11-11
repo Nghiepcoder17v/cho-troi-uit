@@ -62,6 +62,8 @@ The default ETL run is incremental after its first load. It does not pass `--dro
 
 The scheduler is disabled in the default web-app startup. Enable it with `--profile automation`; see [ETL automation](ETL_AUTOMATION.md).
 
+When upgrading an existing DWH created before product SCD Type 2, apply the [DWH migration](../database_scripts/migrations/20261111_dwh_product_scd2.sql) before starting `db-init`, ETL, or the scheduler. Fresh DWH databases use the new schema automatically.
+
 ## Step 8 verification record
 
 Verified locally with Docker Desktop and a separate Compose project/volume:

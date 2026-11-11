@@ -36,6 +36,13 @@ class RunResult:
 def init_dwh(dwh: sa.Engine) -> int:
     """Tạo bảng DWH (nếu chưa có) và nạp dim_date. Idempotent."""
     S.metadata.create_all(dwh)
+    product_columns = {column["name"] for column in sa.inspect(dwh).get_columns("dim_product")}
+    required_columns = {"source_updated_at", "effective_from", "effective_to", "is_current"}
+    if missing := required_columns - product_columns:
+        raise RuntimeError(
+            "DWH dim_product chưa có cột SCD Type 2 "
+            f"{sorted(missing)}; hãy áp dụng database_scripts/migrations/20261111_dwh_product_scd2.sql."
+        )
     with dwh.begin() as conn:
         return L.ensure_dim_date(conn)
 
@@ -119,8 +126,13 @@ def _run(source, dwh, result: RunResult, full: bool, overlap: timedelta) -> None
     # ---------------- LOAD (một transaction: hoặc nạp hết và tiến watermark, hoặc không gì cả)
     with dwh.begin() as conn:
         result.loaded["dim_user"] = L.upsert(conn, S.dim_user, dim_users, "user_id", now)
-        result.loaded["dim_product"] = L.upsert(conn, S.dim_product, dim_products, "product_id", now)
-        L.refresh_category_names(conn, categories.assign(category_name=categories["category_name"].map(T.clean_text)))
+        added_versions, changed_versions = L.load_product_scd2(conn, dim_products, now)
+        category_versions = L.version_category_names(
+            conn,
+            categories.assign(category_name=categories["category_name"].map(T.clean_text)),
+            now,
+        )
+        result.loaded["dim_product"] = (added_versions, changed_versions + category_versions)
         added, updated, orphans = L.load_facts(conn, facts, now)
         result.loaded["fact_transactions"] = (added, updated)
 
@@ -140,7 +152,7 @@ def _run(source, dwh, result: RunResult, full: bool, overlap: timedelta) -> None
     # ---------------- RECONCILE: đối chiếu số dòng nguồn <-> kho
     with dwh.connect() as c:
         dwh_counts = {"users": c.scalar(sa.select(sa.func.count()).select_from(S.dim_user)),
-                      "products": c.scalar(sa.select(sa.func.count()).select_from(S.dim_product)),
+                      "products": c.scalar(sa.select(sa.func.count(sa.distinct(S.dim_product.c.product_id)))),
                       "transactions": c.scalar(sa.select(sa.func.count()).select_from(S.fact_transactions)),
                       "rejected": c.scalar(sa.select(sa.func.count(sa.distinct(S.etl_rejected_rows.c.source_id)))
                                            .where(S.etl_rejected_rows.c.source_table == "transactions"))}

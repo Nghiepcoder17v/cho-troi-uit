@@ -49,7 +49,9 @@ Nếu hết số lần retry, scheduler ghi lỗi cuối cùng ra stdout, để 
 
 Trước mỗi chu kỳ, scheduler lấy khóa ứng dụng độc quyền `cho-troi-uit:etl:scheduler` trong database DWH bằng `sp_getapplock`. Nếu một instance khác đang giữ khóa, instance này bỏ qua lượt đó. Khóa được giải phóng sau chu kỳ hoặc khi kết nối SQL đóng. Không scale service scheduler nếu chưa xác minh cơ chế khóa trên cấu hình SQL Server đích.
 
-Pipeline hiện nạp dimension/fact và cập nhật watermark trong cùng transaction DWH. Fact/dimension được upsert theo khóa nguồn; cửa sổ overlap có thể đọc lại dòng nhưng không tạo thêm fact/dimension. Mỗi retry có `run_id` riêng để giữ lịch sử audit. Không dùng `--drop-dwh` trong scheduler.
+Pipeline hiện nạp dimension/fact và cập nhật watermark trong cùng transaction DWH. Cửa sổ overlap có thể đọc lại dòng; lần chạy lại không tạo fact trùng hoặc phiên bản sản phẩm mới nếu thuộc tính không đổi. Mỗi retry có `run_id` riêng để giữ lịch sử audit. Không dùng `--drop-dwh` trong scheduler.
+
+Nếu nâng từ DWH cũ, cần áp dụng migration [SCD Type 2](../database_scripts/migrations/20261111_dwh_product_scd2.sql) trước khi bật scheduler. Chi tiết migration và giới hạn lịch sử xem [DWH SCD2](DWH_SCD2.md).
 
 ## Kiểm tra thủ công
 
