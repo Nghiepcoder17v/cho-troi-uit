@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { User } from "../types";
 
-export type AppView = "market" | "sell" | "account" | "public-profile";
+export type AppView = "market" | "explore" | "sell" | "account" | "public-profile";
 
 type AppShellProps = {
   user: User | null;
@@ -35,7 +35,8 @@ export function AppShell({
         <span className="brand-mark">ct</span><span>chợ trời <b>UIT</b></span>
       </button>
       <nav className={`nav-links ${mobileNavOpen ? "is-open" : ""}`} id="primary-navigation" aria-label="Điều hướng chính">
-        <button type="button" className={view === "market" ? "active" : ""} aria-current={view === "market" ? "page" : undefined} onClick={() => navigate("market")}>Khám phá</button>
+        <button type="button" className={view === "market" ? "active" : ""} aria-current={view === "market" ? "page" : undefined} onClick={() => navigate("market")}>Trang chủ</button>
+        <button type="button" className={view === "explore" ? "active" : ""} aria-current={view === "explore" ? "page" : undefined} onClick={() => navigate("explore")}>Khám phá</button>
         <button type="button" className={view === "sell" ? "active" : ""} aria-current={view === "sell" ? "page" : undefined} onClick={() => navigate("sell")}>Đăng bán</button>
         {user && <button type="button" className={view === "account" ? "active" : ""} aria-current={view === "account" ? "page" : undefined} onClick={() => navigate("account")}>Tài khoản</button>}
       </nav>
