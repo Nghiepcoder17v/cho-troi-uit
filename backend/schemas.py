@@ -215,9 +215,7 @@ class SellerReputationOut(BaseModel):
     label: str
 
 
-class TokenOut(BaseModel):
-    token: str
-    token_type: str = "bearer"
+class SessionOut(BaseModel):
     user_id: int
     major: Optional[str] = None
 
@@ -323,9 +321,9 @@ class UserEnvelope(BaseModel):
     data: UserOut
 
 
-class TokenEnvelope(BaseModel):
+class SessionEnvelope(BaseModel):
     status: str = "success"
-    data: TokenOut
+    data: SessionOut
 
 
 class CategoryListEnvelope(BaseModel):

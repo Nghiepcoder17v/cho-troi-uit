@@ -25,6 +25,7 @@ import {
   listCategories,
   listProducts,
   login,
+  logout,
   register,
 } from "./api";
 import type { Category, Condition, OrderAction, Pagination, Product, PublicProfile, Review, SellerReputation, TransactionHistory, User } from "./types";
@@ -92,7 +93,13 @@ function App() {
     void listCategories()
       .then((loadedCategories) => setCategories(loadedCategories))
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Không thể tải dữ liệu"));
-    if (localStorage.getItem("access_token")) void getMe().then(setUser).catch(() => localStorage.removeItem("access_token"));
+    try {
+      // Remove the bearer token left by older versions of the app.
+      localStorage.removeItem("access_token");
+    } catch {
+      // Cookie authentication still works when browser storage is unavailable.
+    }
+    void getMe().then(setUser).catch(() => setUser(null));
   }, []);
 
   useEffect(() => {
@@ -137,11 +144,20 @@ function App() {
 
   const featured = useMemo(() => products.slice(0, 3), [products]);
 
-  const signOut = () => {
-    localStorage.removeItem("access_token");
+  const signOut = async () => {
+    let logoutFailed = false;
+    try {
+      await logout();
+    } catch {
+      logoutFailed = true;
+    }
+    localStorage.removeItem("cart");
+    setCart([]);
     setUser(null);
     setView("market");
     setPublicProfileUserId(null);
+    setShowCart(false);
+    setError(logoutFailed ? "Không thể xác nhận đăng xuất với máy chủ. Hãy thử lại." : "");
   };
 
   const openPublicProfile = (userId: number) => {
@@ -1001,7 +1017,7 @@ function ReviewList({ reviews, emptyText }: { reviews: Review[]; emptyText: stri
 function AuthModal({ mode, onClose, onModeChange, onAuthenticated }: { mode: "login" | "register"; onClose: () => void; onModeChange: (mode: "login" | "register") => void; onAuthenticated: (user: User) => void }) {
   const [form, setForm] = useState({ email: "", student_id: "", full_name: "", major: "", password: "" });
   const [error, setError] = useState("");
-  const submit = async (event: FormEvent) => { event.preventDefault(); try { if (mode === "register") await register(form); const session = await login(form.email, form.password); localStorage.setItem("access_token", session.token); onAuthenticated(await getMe()); } catch (reason) { setError(reason instanceof Error ? reason.message : "Thông tin chưa hợp lệ"); } };
+  const submit = async (event: FormEvent) => { event.preventDefault(); try { if (mode === "register") await register(form); await login(form.email, form.password); onAuthenticated(await getMe()); } catch (reason) { setError(reason instanceof Error ? reason.message : "Thông tin chưa hợp lệ"); } };
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form className="auth-modal" onSubmit={(event) => void submit(event)}><button type="button" className="close-button" onClick={onClose}>×</button><p className="eyebrow">{mode === "login" ? "Chào mừng trở lại" : "Tham gia cộng đồng"}</p><h2>{mode === "login" ? "Đăng nhập." : "Tạo tài khoản."}</h2>{error && <div className="form-error">{error}</div>}{mode === "register" && <><label>Họ và tên<input required value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label><label>MSSV<input required pattern="\d{8}" value={form.student_id} onChange={(event) => setForm({ ...form, student_id: event.target.value })} placeholder="25520001" /></label><label>Ngành học<input value={form.major} onChange={(event) => setForm({ ...form, major: event.target.value })} /></label></>}<label>Email UIT<input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="mssv@gm.uit.edu.vn" /></label><label>Mật khẩu<input required minLength={8} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label><button className="dark-button submit-button">{mode === "login" ? "Đăng nhập ↗" : "Tạo tài khoản ↗"}</button><p className="switch-auth">{mode === "login" ? "Chưa có tài khoản?" : "Đã có tài khoản?"} <button type="button" onClick={() => onModeChange(mode === "login" ? "register" : "login")}>{mode === "login" ? "Đăng ký" : "Đăng nhập"}</button></p></form></div>;
 }
 

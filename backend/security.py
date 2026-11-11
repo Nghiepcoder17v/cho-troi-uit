@@ -4,8 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 import models
@@ -20,7 +19,7 @@ if not JWT_SECRET or len(JWT_SECRET) < 32:
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
-_bearer = HTTPBearer(auto_error=False)
+ACCESS_TOKEN_COOKIE_NAME = "access_token"
 
 
 def hash_password(password: str) -> str:
@@ -54,18 +53,18 @@ def _unauthorized(detail: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail=detail,
-        headers={"WWW-Authenticate": "Bearer"},
     )
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    request: Request,
     db: Session = Depends(get_db),
 ) -> models.User:
-    if credentials is None:
+    token = request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
+    if token is None:
         raise _unauthorized("Thiếu token xác thực")
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = int(payload["sub"])
     except (jwt.PyJWTError, KeyError, ValueError):
         raise _unauthorized("Token không hợp lệ hoặc đã hết hạn")

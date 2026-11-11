@@ -85,7 +85,8 @@ hiện; có thể lập thành kế hoạch riêng sau này.
   `transactions` và `reviews`.
 - SQL Server là database triển khai chính.
 - Schema được tạo bằng SQL script; backend **không tự động tạo bảng**.
-- JWT xác thực người dùng và bcrypt băm mật khẩu.
+- JWT phiên đăng nhập được đặt trong cookie `HttpOnly`, `Secure`, `SameSite=Lax`;
+  frontend không lưu token trong JavaScript storage. Mật khẩu được băm bằng bcrypt.
 - Account Center tách thông tin riêng tư khỏi trang cá nhân công khai; API public
   không trả email, MSSV hoặc password hash.
 
@@ -369,7 +370,8 @@ Chi tiết request/response nằm trong [`docs/api_contract.md`](docs/api_contra
 |---|---|---|---|
 | `GET` | `/` | Health check | Không |
 | `POST` | `/api/auth/register` | Đăng ký tài khoản UIT | Không |
-| `POST` | `/api/auth/login` | Đăng nhập và nhận JWT | Không |
+| `POST` | `/api/auth/login` | Đăng nhập; backend đặt cookie phiên HttpOnly | Không |
+| `POST` | `/api/auth/logout` | Xóa cookie phiên | Không |
 | `GET` | `/api/users/me` | Thông tin tài khoản hiện tại | Có |
 | `PATCH` | `/api/users/me` | Cập nhật họ tên và ngành học | Có |
 | `POST` | `/api/users/me/change-password` | Đổi mật khẩu sau khi xác minh mật khẩu hiện tại | Có |
@@ -470,7 +472,7 @@ pytest
 
 Test bao phủ:
 
-- đăng ký, đăng nhập và JWT;
+- đăng ký, đăng nhập bằng cookie JWT HttpOnly, đăng xuất và kiểm tra Origin;
 - review hai chiều, phân quyền theo giao dịch, chỉ cho phép sau Completed,
   sửa review của tác giả và tính điểm trung bình;
 - cập nhật hồ sơ cá nhân, đổi mật khẩu, giới hạn dữ liệu trang cá nhân công khai,
@@ -542,6 +544,8 @@ ETL không bật mặc định. Xem [tài liệu Compose](docs/DOCKER_COMPOSE.md
 ## Bảo mật và toàn vẹn dữ liệu
 
 - Mật khẩu chỉ được lưu dưới dạng bcrypt hash.
+- Cookie phiên dùng `HttpOnly`, `Secure`, `SameSite=Lax`; các request thay đổi dữ liệu
+  có cookie phải gửi `Origin` trong danh sách `CORS_ORIGINS`.
 - JWT secret và connection strings chỉ nằm trong `.env` hoặc `.env.compose` cục bộ; không commit các file này.
 - API không nhận `seller_id` hoặc `buyer_id` từ client; các giá trị này lấy từ
   token.
