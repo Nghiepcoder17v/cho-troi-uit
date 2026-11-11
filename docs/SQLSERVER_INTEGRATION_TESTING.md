@@ -2,6 +2,11 @@
 
 ## Mục tiêu
 
+Tên database chuẩn của dự án là `ChoTroUIT` (OLTP) và `ChoTroUIT_DWH` (DWH).
+`UIT_Exchange` được nhắc trong phần kết quả bên dưới chỉ là tên database của
+môi trường cá nhân đã dùng để xác minh migration; nó không phải tên mặc định
+của dự án hay tên database kiểm thử.
+
 Bộ test backend hiện tại chạy trên SQLite in-memory. SQLite hữu ích để kiểm tra API và nghiệp vụ cơ bản, nhưng không chứng minh được hành vi của SQL Server đối với:
 
 - Filtered unique index `UX_Transactions_ActiveProduct`.
