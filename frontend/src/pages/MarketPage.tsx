@@ -1,5 +1,6 @@
 import type { Category, Pagination, Product } from "../types";
 import { ProductCard } from "../components/ProductCard";
+import { EmptyState } from "../components/primitives";
 
 type MarketPageProps = {
   categories: Category[];
@@ -43,7 +44,7 @@ export function MarketPage({
         <span>Trang {pagination.current_page} / {pagination.total_pages}</span>
         <button type="button" disabled={page >= pagination.total_pages} onClick={() => onPageChange(Math.min(pagination.total_pages, page + 1))}>Sau →</button>
       </nav>}
-      {!products.length && <div className="empty-state">Chưa có sản phẩm phù hợp. Hãy thử từ khóa khác.</div>}
+      {!products.length && <EmptyState title="Chưa có sản phẩm phù hợp" description="Hãy thử từ khóa khác hoặc xóa bộ lọc danh mục." />}
     </section>
     {hasFeatured && <section className="wide-banner"><div><p className="eyebrow">Dành cho bạn</p><h2>Một vòng quanh chợ,<br />một món đồ vừa ý.</h2><button className="dark-button" onClick={() => onQueryChange("")}>Xem thêm sản phẩm <span>↗</span></button></div><div className="banner-shape">✳</div></section>}
   </main>;
