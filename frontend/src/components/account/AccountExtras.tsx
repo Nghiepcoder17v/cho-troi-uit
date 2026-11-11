@@ -1,3 +1,10 @@
+import { useState } from "react";
+import type { FormEvent } from "react";
+import { changeMyPassword } from "../../api";
+import type { Product } from "../../types";
+import { money } from "../../utils/format";
+import { Button, Field } from "../primitives";
+
 export function CartPanel({ cart, onRemove, onCheckout, onBrowse }: {
   cart: Product[];
   onRemove: (id: number) => void;
@@ -28,8 +35,18 @@ export function AccountSettings({ theme, onToggleTheme, onSignOut }: {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const closePasswordForm = () => {
+    setChangingPassword(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setMessage("");
+    setError("");
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setMessage(""); setError("");
@@ -47,18 +64,21 @@ export function AccountSettings({ theme, onToggleTheme, onSignOut }: {
   return <section className="account-section-content account-settings-grid">
     <section className="account-card">
       <div className="account-card-heading"><div><p className="eyebrow">GIAO DIỆN</p><h2>Chủ đề hiển thị</h2><p>Thay đổi giao diện sáng hoặc tối cho thiết bị này.</p></div></div>
-      <div className="account-theme-control"><div><strong>{theme === "dark" ? "Dark Mode" : "Light Mode"}</strong><small>Chủ đề hiện tại</small></div><button type="button" className="outline-button" onClick={onToggleTheme}>Chuyển sang {theme === "dark" ? "Light" : "Dark"}</button></div>
+      <div className="account-theme-control"><div><strong>{theme === "dark" ? "Dark Mode" : "Light Mode"}</strong><small>Chủ đề hiện tại</small></div><Button variant="outline" type="button" onClick={onToggleTheme}>Chuyển sang {theme === "dark" ? "Light" : "Dark"}</Button></div>
     </section>
     <section className="account-card">
       <div className="account-card-heading"><div><p className="eyebrow">BẢO MẬT</p><h2>Đổi mật khẩu</h2><p>Xác minh mật khẩu hiện tại trước khi đặt mật khẩu mới.</p></div></div>
-      <form className="account-form account-password-form" onSubmit={(event) => void submit(event)}>
-        <label>Mật khẩu hiện tại<input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
-        <label>Mật khẩu mới<input required minLength={8} maxLength={72} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>
-        <label>Xác nhận mật khẩu mới<input required minLength={8} maxLength={72} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
+      {!changingPassword ? <Button variant="outline" type="button" onClick={() => setChangingPassword(true)}>Đổi mật khẩu</Button> : <form id="account-password-form" className="account-form account-password-form" onSubmit={(event) => void submit(event)}>
+        <Field label="Mật khẩu hiện tại"><input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></Field>
+        <Field label="Mật khẩu mới" hint="Tối thiểu 8 ký tự."><input required minLength={8} maxLength={72} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></Field>
+        <Field label="Xác nhận mật khẩu mới"><input required minLength={8} maxLength={72} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></Field>
         {message && <p className="form-success" role="status">{message}</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="dark-button" type="submit" disabled={saving}>{saving ? "Đang cập nhật..." : "Cập nhật mật khẩu"}</button>
-      </form>
+        <div className="account-form-actions">
+          <Button type="submit" disabled={saving}>{saving ? "Đang cập nhật..." : "Cập nhật mật khẩu"}</Button>
+          <Button variant="outline" type="button" onClick={closePasswordForm} disabled={saving}>Hủy</Button>
+        </div>
+      </form>}
     </section>
     <section className="account-card account-danger-card">
       <div><p className="eyebrow">PHIÊN ĐĂNG NHẬP</p><h2>Đăng xuất khỏi tài khoản</h2><p>Đăng xuất trên trình duyệt hiện tại và xóa giỏ hàng đã lưu trên thiết bị này.</p></div>
@@ -66,9 +86,4 @@ export function AccountSettings({ theme, onToggleTheme, onSignOut }: {
     </section>
   </section>;
 }
-import { useState } from "react";
-import type { FormEvent } from "react";
-import { changeMyPassword } from "../../api";
-import type { Product } from "../../types";
-import { money } from "../../utils/format";
 

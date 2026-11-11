@@ -222,13 +222,11 @@ function App() {
       view={view}
       mobileNavOpen={mobileNavOpen}
       cartCount={cart.length}
-      theme={theme}
       notice={notice}
       error={error}
       onNavigate={setView}
       onOpenLogin={() => { setAuthMode("login"); setShowAuth(true); }}
       onOpenCart={() => { setShowCart(true); setMobileNavOpen(false); }}
-      onToggleTheme={toggleTheme}
       onToggleMenu={() => setMobileNavOpen((open) => !open)}
       onCloseMenu={() => setMobileNavOpen(false)}
       onClearNotice={() => setNotice("")}

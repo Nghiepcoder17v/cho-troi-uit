@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { User } from "../types";
-import { ThemeToggle } from "./ThemeToggle";
 
 export type AppView = "market" | "sell" | "account" | "public-profile";
 
@@ -9,14 +8,12 @@ type AppShellProps = {
   view: AppView;
   mobileNavOpen: boolean;
   cartCount: number;
-  theme: "dark" | "light";
   notice: string;
   error: string;
   children: ReactNode;
   onNavigate: (view: AppView) => void;
   onOpenLogin: () => void;
   onOpenCart: () => void;
-  onToggleTheme: () => void;
   onToggleMenu: () => void;
   onCloseMenu: () => void;
   onClearNotice: () => void;
@@ -24,8 +21,8 @@ type AppShellProps = {
 };
 
 export function AppShell({
-  user, view, mobileNavOpen, cartCount, theme, notice, error, children,
-  onNavigate, onOpenLogin, onOpenCart, onToggleTheme, onToggleMenu, onCloseMenu, onClearNotice, onClearError,
+  user, view, mobileNavOpen, cartCount, notice, error, children,
+  onNavigate, onOpenLogin, onOpenCart, onToggleMenu, onCloseMenu, onClearNotice, onClearError,
 }: AppShellProps) {
   const navigate = (nextView: AppView) => {
     onNavigate(nextView);
@@ -45,14 +42,13 @@ export function AppShell({
       <div className="header-actions">
         {user ? <button className="user-chip" onClick={() => navigate("account")} type="button"><span>{user.full_name.slice(0, 1)}</span><span className="user-chip-name">{user.full_name}</span></button> : <button className="outline-button" onClick={onOpenLogin} type="button">Đăng nhập</button>}
         <button className="cart-button" onClick={onOpenCart} aria-label={`Mở giỏ hàng, ${cartCount} sản phẩm`} type="button">Giỏ hàng <b>{cartCount}</b></button>
-        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         <button className={`menu-toggle ${mobileNavOpen ? "is-open" : ""}`} type="button" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" aria-label={mobileNavOpen ? "Đóng menu" : "Mở menu"} onClick={onToggleMenu}>
           <span aria-hidden="true">{mobileNavOpen ? "×" : "☰"}</span>
         </button>
       </div>
     </header>
-    {notice && <div className="toast success">{notice}<button onClick={onClearNotice}>×</button></div>}
-    {error && <div className="toast error">{error}<button onClick={onClearError}>×</button></div>}
+    {notice && <div className="toast success" role="status" aria-live="polite">{notice}<button type="button" aria-label="Đóng thông báo" onClick={onClearNotice}>×</button></div>}
+    {error && <div className="toast error" role="alert" aria-live="assertive">{error}<button type="button" aria-label="Đóng thông báo lỗi" onClick={onClearError}>×</button></div>}
     {children}
     <footer><span>chợ trời UIT</span><span>Made for the UIT community · 2026</span></footer>
   </div>;

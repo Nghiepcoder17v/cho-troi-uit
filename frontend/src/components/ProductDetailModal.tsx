@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSellerReputation, getUserReviews } from "../api";
+import { useDialogFocus } from "../hooks/useDialogFocus";
+import { Skeleton, StatusBadge } from "./primitives";
 import type { Product, Review, SellerReputation } from "../types";
 import { money } from "../utils/format";
 import { ReviewList } from "./ReviewList";
@@ -12,9 +14,11 @@ type ProductDetailModalProps = {
 };
 
 export function ProductDetailModal({ product, onClose, onAdd, onViewSeller }: ProductDetailModalProps) {
+  const dialogRef = useRef<HTMLElement>(null);
   const [reputation, setReputation] = useState<SellerReputation | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  useDialogFocus(dialogRef, onClose);
 
   useEffect(() => {
     let active = true;
@@ -35,14 +39,17 @@ export function ProductDetailModal({ product, onClose, onAdd, onViewSeller }: Pr
   }, [product.seller.user_id]);
 
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-    <section className="detail-modal">
-      <button className="close-button" onClick={onClose}>×</button>
+    <section ref={dialogRef} className="detail-modal" role="dialog" aria-modal="true" aria-labelledby="product-detail-title" tabIndex={-1}>
+      <button type="button" className="close-button" aria-label="Đóng chi tiết sản phẩm" onClick={onClose}>×</button>
       <div className={`detail-image image-${product.product_id % 4}`}>
         <span className="image-glyph">{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span>
       </div>
       <div className="detail-content">
         <p className="eyebrow">{product.condition} · Chi tiết sản phẩm</p>
-        <h2>{product.title}</h2>
+        <StatusBadge tone={product.status === "Available" ? "success" : product.status === "Reserved" ? "warning" : product.status === "Sold" ? "info" : "neutral"}>
+          {product.status === "Available" ? "Đang mở bán" : product.status === "Reserved" ? "Đang được giữ chỗ" : product.status === "Sold" ? "Đã bán" : "Tin đã ẩn"}
+        </StatusBadge>
+        <h2 id="product-detail-title">{product.title}</h2>
         <strong className="detail-price">{money.format(product.price)}</strong>
         <p className="detail-description">{product.description || "Người bán chưa thêm mô tả cho sản phẩm này."}</p>
         <div className="trust-card">
@@ -63,7 +70,7 @@ export function ProductDetailModal({ product, onClose, onAdd, onViewSeller }: Pr
               {reputation?.score == null ? "Chưa có điểm" : `${reputation.score.toFixed(1)}/5`}
             </strong>
           </div>
-          {loading ? <p className="muted">Đang tải đánh giá...</p> : <ReviewList reviews={reviews} emptyText="Người bán chưa nhận được đánh giá nào." />}
+          {loading ? <Skeleton label="Đang tải đánh giá của người bán" /> : <ReviewList reviews={reviews} emptyText="Người bán chưa nhận được đánh giá nào." />}
         </section>
         <button className="dark-button submit-button" onClick={onAdd} disabled={product.status !== "Available"}>
           {product.status === "Available" ? "Thêm vào giỏ hàng ↗" : product.status === "Reserved" ? "Đang được giữ chỗ" : "Sản phẩm đã bán"}
