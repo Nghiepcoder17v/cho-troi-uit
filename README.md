@@ -4,10 +4,11 @@ Nền tảng C2C để sinh viên UIT đăng bán, tìm mua và trao đổi đ�
 cung cấp marketplace React/FastAPI, SQL Server OLTP và Data Warehouse cùng
 pipeline ETL, lịch chạy tự động và các báo cáo analytics.
 
-> **Trạng thái lộ trình bàn giao:** Step 1–10 đã hoàn tất. Các phần mở rộng
-> SCD Type 2 cho sản phẩm và báo cáo sell-through theo danh mục cũng đã được
-> triển khai, kiểm thử và merge. Hiện chưa có role admin/moderator; quản trị
-> và kiểm duyệt nâng cao là hướng phát triển dài hạn chưa được duyệt.
+> **Trạng thái lộ trình:** Step 1–10 và các mở rộng ban đầu đã hoàn tất. Các
+> Step 11–15 đang được triển khai qua PR riêng; xem bảng trạng thái bên dưới.
+> Một số việc cần xác nhận trên môi trường thật hoặc thao tác của chủ repo vẫn
+> đang chờ. Hiện chưa có role admin/moderator; quản trị và kiểm duyệt nâng cao
+> là hướng phát triển dài hạn chưa được duyệt.
 
 ## Mục lục
 
@@ -71,6 +72,11 @@ flowchart LR
 | Step 10 — CI và chất lượng code | Hoàn thành; backend, pipeline, lint và frontend build |
 | Mở rộng — Product SCD Type 2 | Hoàn thành; `docs/DWH_SCD2.md` |
 | Mở rộng — Analytics theo danh mục | Hoàn thành; báo cáo `listing_sell_through_by_category` |
+| Step 11 — Cookie phiên và xóa giỏ hàng | Đã triển khai, chờ review/merge PR #16; cần kiểm tra luồng trình duyệt thực tế |
+| Step 12 — Tài liệu và metadata repository | Tài liệu đã cập nhật, chờ review/merge PR #17; description/topics GitHub còn chờ quyền ghi |
+| Step 13 — Backend cleanup và MSSV 8 chữ số | Đã triển khai, chờ review/merge PR #18; migration và SQL Server integration cần chạy trên DB đích |
+| Step 14 — Tách frontend | Đã triển khai, build thành công, chờ review/merge PR #19 |
+| Step 15 — SQLite datetime adapter | Hoàn thành; 64 pipeline tests qua với DeprecationWarning được nâng thành lỗi; PR #20 chờ review/merge |
 
 Các mốc trên mô tả phạm vi bàn giao đã thống nhất. Phân quyền vai trò quản trị
 (admin/moderator) và kiểm duyệt tin đăng vi phạm chưa được triển khai; đây là
@@ -586,8 +592,15 @@ ETL không bật mặc định. Xem [tài liệu Compose](docs/DOCKER_COMPOSE.md
 - [x] Step 10: CI cho backend, data pipeline, lint và frontend build ([cấu hình](docs/CI.md)).
 - [x] Mở rộng DWH: SCD Type 2 cho lịch sử sản phẩm ([chi tiết](docs/DWH_SCD2.md)).
 - [x] Mở rộng analytics: sell-through và trạng thái listing theo danh mục.
+- [x] Step 11: cookie phiên bảo mật và logout xóa giỏ hàng; [PR #16](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/16) chờ review/merge và kiểm tra trình duyệt.
+- [x] Step 12: đồng bộ quy trình Git và ghi chú database; [PR #17](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/17) chờ review/merge. Description/topics GitHub còn chờ quyền ghi.
+- [x] Step 13: helper reputation và MSSV 8 chữ số; [PR #18](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/18) chờ review/merge. Migration cần áp dụng có kiểm soát trên database đích.
+- [x] Step 14: tách App thành pages/components; [PR #19](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/19) chờ review/merge.
+- [x] Step 15: adapter/converter datetime SQLite tường minh; 64 pipeline tests qua với DeprecationWarning là lỗi; [PR #20](https://github.com/Nghiepcoder17v/cho-troi-uit/pull/20) chờ review/merge.
 
-Lộ trình bàn giao ban đầu đã hoàn thành. Phân quyền vai trò quản trị
+Các hạng mục kỹ thuật Step 11–15 đã được chuẩn bị trong các PR; toàn bộ lộ trình
+chưa thể xem là hoàn tất cho đến khi PR được review/merge và các xác nhận môi
+trường nêu trên được xử lý. Phân quyền vai trò quản trị
 (admin/moderator) và kiểm duyệt tin vi phạm là đề xuất chưa được duyệt phạm vi;
 không nhầm mục này với tính năng chủ sở hữu quản lý tin đã có ở Account Center.
 

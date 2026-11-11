@@ -1,4 +1,5 @@
 from datetime import datetime
+import sqlite3
 
 import pandas as pd
 import pytest
@@ -6,6 +7,20 @@ import sqlalchemy as sa
 
 import generate_seed as gs
 from etl.extract import query_df
+
+
+def _adapt_datetime(value: datetime) -> str:
+    """Store SQLite test timestamps in an explicit, ISO-8601 representation."""
+    return value.isoformat(sep=" ")
+
+
+def _convert_datetime(value: bytes) -> datetime:
+    """Read timestamps written by _adapt_datetime without relying on deprecated defaults."""
+    return datetime.fromisoformat(value.decode("utf-8"))
+
+
+sqlite3.register_adapter(datetime, _adapt_datetime)
+sqlite3.register_converter("DATETIME", _convert_datetime)
 
 END = datetime(2026, 11, 8, 23, 59)
 
