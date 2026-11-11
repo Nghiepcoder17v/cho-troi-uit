@@ -1,17 +1,18 @@
 # Chợ Trời UIT
 
-Hệ thống mua bán và trao đổi đồ cũ nội bộ dành cho sinh viên UIT (C2C), kết hợp
-frontend React, backend REST, cơ sở dữ liệu giao dịch và data pipeline phục vụ
-phân tích hành vi giao dịch.
+Nền tảng C2C để sinh viên UIT đăng bán, tìm mua và trao đổi đồ cũ. Repository
+cung cấp marketplace React/FastAPI, SQL Server OLTP và Data Warehouse cùng
+pipeline ETL, lịch chạy tự động và các báo cáo analytics.
 
-> Trạng thái hiện tại: marketplace có luồng yêu cầu mua, giữ chỗ, seller duyệt
-> và xác nhận hoàn tất từ cả buyer lẫn seller. Step 7 đã xác nhận backend,
-> data pipeline và các luồng chính trên SQL Server cục bộ. Docker Compose được
-> bổ sung tại Step 8 để chuẩn hóa môi trường phát triển.
+> **Trạng thái lộ trình bàn giao:** Step 1–10 đã hoàn tất. Các phần mở rộng
+> SCD Type 2 cho sản phẩm và báo cáo sell-through theo danh mục cũng đã được
+> triển khai, kiểm thử và merge. Quản trị/phân quyền nâng cao là hướng phát
+> triển dài hạn, chưa thuộc phạm vi đã duyệt.
 
 ## Mục lục
 
 - [Tổng quan](#tổng-quan)
+- [Trạng thái lộ trình](#trạng-thái-lộ-trình)
 - [Kiến trúc](#kiến-trúc)
 - [Cấu trúc dự án](#cấu-trúc-dự-án)
 - [Công nghệ](#công-nghệ)
@@ -21,6 +22,7 @@ phân tích hành vi giao dịch.
 - [Chạy backend](#chạy-backend)
 - [Chạy frontend](#chạy-frontend)
 - [Chạy bằng Docker Compose](#chạy-bằng-docker-compose)
+- [Vận hành và di chuyển database](#vận-hành-và-di-chuyển-database)
 - [Sinh và kiểm tra dữ liệu](#sinh-và-kiểm-tra-dữ-liệu)
 - [Chạy ETL và analytics](#chạy-etl-và-analytics)
 - [Tự động chạy ETL](#tự-động-chạy-etl)
@@ -52,6 +54,27 @@ flowchart LR
     ETL -->|Upsert trong một transaction| DWH[("Data Warehouse")]
     DWH --> SQL["Analytics SQL"]
 ```
+
+## Trạng thái lộ trình
+
+| Mốc | Kết quả |
+|---|---|
+| Step 1 — Audit hệ thống | Hoàn thành |
+| Step 2 — Design Profile | Hoàn thành; `docs/DESIGN_PROFILE.md` |
+| Step 3 — UI Foundation | Hoàn thành; design tokens, theme và responsive foundation |
+| Step 4 — Marketplace và Purchase Flow | Hoàn thành; yêu cầu mua, giữ chỗ, seller duyệt và hai bên xác nhận |
+| Step 5 — Review và Reputation | Hoàn thành; đánh giá hai chiều sau giao dịch Completed |
+| Step 6 — Account Center | Hoàn thành; hồ sơ, tin đăng, đơn mua/bán và cài đặt |
+| Step 7 — Kiểm thử tích hợp | Hoàn thành; có bằng chứng tại `docs/SQLSERVER_INTEGRATION_TESTING.md` |
+| Step 8 — Docker Compose | Hoàn thành; có bằng chứng tại `docs/DOCKER_COMPOSE.md` |
+| Step 9 — Tự động hóa ETL | Hoàn thành; scheduler, watermark, retry và run log |
+| Step 10 — CI và chất lượng code | Hoàn thành; backend, pipeline, lint và frontend build |
+| Mở rộng — Product SCD Type 2 | Hoàn thành; `docs/DWH_SCD2.md` |
+| Mở rộng — Analytics theo danh mục | Hoàn thành; báo cáo `listing_sell_through_by_category` |
+
+Các mốc trên mô tả phạm vi bàn giao đã thống nhất. Phân quyền quản trị và kiểm
+duyệt tin đăng nâng cao chưa được triển khai vì chưa được đưa vào phạm vi thực
+hiện; có thể lập thành kế hoạch riêng sau này.
 
 ## Kiến trúc
 
@@ -187,6 +210,11 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
 Không commit `.env`. File này đã nằm trong `.gitignore`.
+
+Các biến trong `.env` dành cho chạy backend và pipeline trực tiếp trên máy.
+Docker Compose dùng file riêng `.env.compose`; không dùng chung connection URL
+giữa hai cách chạy. Tham khảo [`.env.compose.example`](.env.compose.example) và
+[hướng dẫn Compose](docs/DOCKER_COMPOSE.md).
 
 ## Chạy backend
 
@@ -412,8 +440,12 @@ Star Schema gồm:
   thời gian bán.
 - `etl_watermark`, `etl_run_log`, `etl_rejected_rows`: điều khiển và audit ETL.
 
-Dimension hiện sử dụng SCD Type 1. Email, MSSV và password hash không được đưa
-vào Data Warehouse để giảm dữ liệu định danh không cần thiết.
+`dim_product` dùng SCD Type 2: ETL lưu các phiên bản thuộc tính tin đăng và fact
+tham chiếu phiên bản có hiệu lực tại thời điểm giao dịch. `dim_user` và
+`dim_date` vẫn dùng SCD Type 1. Email, MSSV và password hash không được đưa vào
+Data Warehouse để giảm dữ liệu định danh không cần thiết. SCD2 chỉ ghi nhận
+thay đổi ETL quan sát sau khi tính năng được bật; xem [giới hạn và hướng dẫn
+migration](docs/DWH_SCD2.md).
 
 Sơ đồ chi tiết:
 
@@ -455,11 +487,57 @@ Các test mặc định chạy trên SQLite để không yêu cầu SQL Server. 
 test bật riêng đã chạy thành công trên SQL Server Express cục bộ; xem
 [biên bản Step 7](docs/SQLSERVER_INTEGRATION_TESTING.md) để biết phạm vi và kết quả.
 
+SQL Server integration test được opt-in để tránh vô tình ghi lên database khác.
+Chỉ chạy trên database kiểm thử riêng có tên kết thúc bằng `_test`, sau khi đọc
+[hướng dẫn kiểm thử SQL Server](docs/SQLSERVER_INTEGRATION_TESTING.md):
+
+```powershell
+$env:SQLSERVER_TEST_DATABASE_URL = "mssql+pyodbc://@localhost/ChoTroUIT_Step7_Test?driver=ODBC+Driver+18+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes"
+$env:RUN_SQLSERVER_INTEGRATION = "1"
+Set-Location backend
+pytest -v -m sqlserver_integration
+```
+
 ## Chạy bằng Docker Compose
 
 Compose chạy frontend production qua Nginx, FastAPI, SQL Server với hai database
 OLTP/DWH và các lệnh ETL/analytics tùy chọn. Hướng dẫn cấu hình, khởi tạo an toàn
 và lệnh vận hành nằm tại [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.md).
+
+Tóm tắt khởi động từ PowerShell ở thư mục gốc:
+
+```powershell
+Copy-Item .env.compose.example .env.compose
+# Điền MSSQL_SA_PASSWORD và JWT_SECRET trong .env.compose trước khi chạy.
+docker compose --env-file .env.compose up --build
+```
+
+Mở `http://localhost:8080`. Dừng container mà vẫn giữ database bằng:
+
+```powershell
+docker compose --env-file .env.compose down
+```
+
+Database nằm trong Docker named volume; xóa volume sẽ xóa OLTP và DWH. Scheduler
+ETL không bật mặc định. Xem [tài liệu Compose](docs/DOCKER_COMPOSE.md) và
+[hướng dẫn scheduler](docs/ETL_AUTOMATION.md) trước khi bật automation.
+
+## Vận hành và di chuyển database
+
+- `database_scripts/01_init_schema.sql` có thao tác drop bảng; chỉ dùng khi tạo
+  mới hoặc chủ động reset database phát triển. Không chạy trên database đang có
+  dữ liệu cần giữ.
+- Với OLTP cũ, sao lưu và kiểm tra migration đã áp dụng trước khi chạy. Migration
+  purchase request và review lần lượt là
+  `database_scripts/migrations/20261110_purchase_requests.sql` và
+  `database_scripts/migrations/20261110_reviews.sql`.
+- Với DWH tạo trước SCD Type 2, sao lưu rồi áp dụng
+  `database_scripts/migrations/20261111_dwh_product_scd2.sql` trước khi chạy ETL
+  mới. Xem [hướng dẫn nâng cấp DWH](docs/DWH_SCD2.md).
+- Docker initializer không tự áp dụng migration cho database hiện hữu. Xác nhận
+  trạng thái schema trước khi trỏ backend hoặc ETL vào database đó.
+- Không dùng `generate_seed.py --reset` hoặc `run_etl.py --drop-dwh` trên dữ liệu
+  cần giữ. `--drop-dwh` xóa toàn bộ Data Warehouse.
 
 ## Bảo mật và toàn vẹn dữ liệu
 
@@ -479,15 +557,17 @@ và lệnh vận hành nằm tại [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.
 
 ## Lộ trình phát triển
 
-- [x] Xây dựng frontend marketplace và luồng yêu cầu mua hai bên.
-- [x] Bổ sung hệ thống review hai chiều, chỉ cho phép sau Completed (Step 5).
-- [x] Tổ chức lại Account Center thành các khu vực riêng và trang cá nhân công khai (Step 6).
-- [x] Hoàn tất kiểm thử tích hợp SQL Server, pipeline, build và smoke test Step 7 ([kết quả](docs/SQLSERVER_INTEGRATION_TESTING.md)).
-- [x] Thêm và kiểm chứng Docker Compose cho OLTP, DWH, API, frontend và ETL ([hướng dẫn và kết quả](docs/DOCKER_COMPOSE.md)).
-- [x] Lập lịch chạy ETL tự động bằng Compose, quản lý retry và trạng thái ([Step 9](docs/ETL_AUTOMATION.md)).
-- [x] Thiết lập CI chạy test và kiểm tra chất lượng code ([Step 10](docs/CI.md)).
-- [ ] Bổ sung phân quyền và quản lý tin đăng.
-- [x] Nâng `dim_product` lên SCD Type 2 để lưu thuộc tính tin đăng theo thời gian ([Step tiếp theo](docs/DWH_SCD2.md)).
+- [x] Step 1–6: audit, thiết kế, UI foundation, marketplace, review và Account Center.
+- [x] Step 7: kiểm chứng backend, SQL Server integration, pipeline, frontend build và smoke test ([kết quả](docs/SQLSERVER_INTEGRATION_TESTING.md)).
+- [x] Step 8: đóng gói và kiểm chứng môi trường Docker Compose ([hướng dẫn/kết quả](docs/DOCKER_COMPOSE.md)).
+- [x] Step 9: scheduler ETL, watermark, retry, log và khóa chạy đồng thời ([hướng dẫn/kết quả](docs/ETL_AUTOMATION.md)).
+- [x] Step 10: CI cho backend, data pipeline, lint và frontend build ([cấu hình](docs/CI.md)).
+- [x] Mở rộng DWH: SCD Type 2 cho lịch sử sản phẩm ([chi tiết](docs/DWH_SCD2.md)).
+- [x] Mở rộng analytics: sell-through và trạng thái listing theo danh mục.
+
+Lộ trình bàn giao ban đầu đã hoàn thành. Phân quyền quản trị và kiểm duyệt tin
+đăng nâng cao là đề xuất dài hạn chưa được duyệt phạm vi hoặc triển khai; cần
+được xác định yêu cầu và kế hoạch riêng trước khi bắt đầu.
 
 ## Quy trình Git đề xuất
 
