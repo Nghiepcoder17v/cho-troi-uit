@@ -32,7 +32,7 @@ GO
 -- 2. NGƯỜI DÙNG (chỉ nhận sinh viên UIT)
 CREATE TABLE USERS (
     user_id       INT IDENTITY (1, 1) NOT NULL,
-    student_id    VARCHAR(10)   NOT NULL,
+    student_id    VARCHAR(8)    NOT NULL,
     email         VARCHAR(100)  NOT NULL,
     password_hash VARCHAR(100)  NOT NULL,   -- bcrypt (60 ký tự), KHÔNG lưu mật khẩu thô
     full_name     NVARCHAR(100) NOT NULL,
@@ -43,6 +43,9 @@ CREATE TABLE USERS (
     CONSTRAINT PK_Users PRIMARY KEY (user_id),
     CONSTRAINT UQ_Users_StudentId UNIQUE (student_id),
     CONSTRAINT UQ_Users_Email UNIQUE (email),
+    CONSTRAINT CK_Users_StudentIdFormat CHECK (
+        LEN(student_id) = 8 AND student_id NOT LIKE '%[^0-9]%'
+    ),
     -- Chỉ nhận đúng đuôi email trường (neo cuối chuỗi, không cho "...uit.edu.vn.evil.com")
     CONSTRAINT CHK_User_Email CHECK (email LIKE '%@gm.uit.edu.vn')
 );
