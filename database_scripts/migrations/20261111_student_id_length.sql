@@ -17,7 +17,26 @@ IF EXISTS (
 BEGIN TRANSACTION;
 
 IF COL_LENGTH(N'dbo.USERS', N'student_id') <> 8
+BEGIN
+    -- SQL Server will not alter a column while its UNIQUE constraint exists.
+    IF EXISTS (
+        SELECT 1
+        FROM sys.key_constraints
+        WHERE parent_object_id = OBJECT_ID(N'dbo.USERS')
+          AND name = N'UQ_Users_StudentId'
+    )
+        ALTER TABLE dbo.USERS DROP CONSTRAINT UQ_Users_StudentId;
+
     ALTER TABLE dbo.USERS ALTER COLUMN student_id VARCHAR(8) NOT NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.key_constraints
+    WHERE parent_object_id = OBJECT_ID(N'dbo.USERS')
+      AND name = N'UQ_Users_StudentId'
+)
+    ALTER TABLE dbo.USERS ADD CONSTRAINT UQ_Users_StudentId UNIQUE (student_id);
 
 IF OBJECT_ID(N'dbo.CK_Users_StudentIdFormat', N'C') IS NULL
 BEGIN
