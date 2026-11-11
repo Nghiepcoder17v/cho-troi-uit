@@ -6,8 +6,8 @@ pipeline ETL, lịch chạy tự động và các báo cáo analytics.
 
 > **Trạng thái lộ trình bàn giao:** Step 1–10 đã hoàn tất. Các phần mở rộng
 > SCD Type 2 cho sản phẩm và báo cáo sell-through theo danh mục cũng đã được
-> triển khai, kiểm thử và merge. Quản trị/phân quyền nâng cao là hướng phát
-> triển dài hạn, chưa thuộc phạm vi đã duyệt.
+> triển khai, kiểm thử và merge. Hiện chưa có role admin/moderator; quản trị
+> và kiểm duyệt nâng cao là hướng phát triển dài hạn chưa được duyệt.
 
 ## Mục lục
 
@@ -72,9 +72,10 @@ flowchart LR
 | Mở rộng — Product SCD Type 2 | Hoàn thành; `docs/DWH_SCD2.md` |
 | Mở rộng — Analytics theo danh mục | Hoàn thành; báo cáo `listing_sell_through_by_category` |
 
-Các mốc trên mô tả phạm vi bàn giao đã thống nhất. Phân quyền quản trị và kiểm
-duyệt tin đăng nâng cao chưa được triển khai vì chưa được đưa vào phạm vi thực
-hiện; có thể lập thành kế hoạch riêng sau này.
+Các mốc trên mô tả phạm vi bàn giao đã thống nhất. Phân quyền vai trò quản trị
+(admin/moderator) và kiểm duyệt tin đăng vi phạm chưa được triển khai; đây là
+đề xuất dài hạn cần có yêu cầu và kế hoạch riêng. Quản lý tin đăng hiện có cho
+phép chủ sở hữu sửa, ẩn hoặc mở bán lại tin theo trạng thái nghiệp vụ.
 
 ## Kiến trúc
 
@@ -569,19 +570,23 @@ ETL không bật mặc định. Xem [tài liệu Compose](docs/DOCKER_COMPOSE.md
 - [x] Mở rộng DWH: SCD Type 2 cho lịch sử sản phẩm ([chi tiết](docs/DWH_SCD2.md)).
 - [x] Mở rộng analytics: sell-through và trạng thái listing theo danh mục.
 
-Lộ trình bàn giao ban đầu đã hoàn thành. Phân quyền quản trị và kiểm duyệt tin
-đăng nâng cao là đề xuất dài hạn chưa được duyệt phạm vi hoặc triển khai; cần
-được xác định yêu cầu và kế hoạch riêng trước khi bắt đầu.
+Lộ trình bàn giao ban đầu đã hoàn thành. Phân quyền vai trò quản trị
+(admin/moderator) và kiểm duyệt tin vi phạm là đề xuất chưa được duyệt phạm vi;
+không nhầm mục này với tính năng chủ sở hữu quản lý tin đã có ở Account Center.
 
-## Quy trình Git đề xuất
+## Quy trình Git
 
 ```text
-main (ổn định)
-└── dev (tích hợp)
-    ├── feat/<ten-tinh-nang>
-    ├── fix/<ten-loi>
-    └── docs/<ten-tai-lieu>
+main
+├── feat/<feature-name>
+├── fix/<bug-name>
+├── test/<test-name>
+└── docs/<documentation-change>
+
+branch riêng → Pull Request vào main → CI và review → chủ dự án merge
 ```
+
+Không commit trực tiếp vào `main`; chờ CI xanh và review trước khi merge.
 
 ## Tác giả
 
