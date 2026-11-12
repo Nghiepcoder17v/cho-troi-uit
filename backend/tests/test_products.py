@@ -43,6 +43,59 @@ def test_list_filters_and_pagination(client, seller_headers):
     assert [p["title"] for p in r["data"]] == ["Sách A"]
 
 
+
+
+def test_list_filters_by_condition_and_inclusive_price_range(client, seller_headers):
+    create(client, seller_headers, title="Laptop giá thấp", price=100000, condition="Good")
+    create(client, seller_headers, title="Laptop tầm trung", price=200000, condition="Like New")
+    create(client, seller_headers, title="Laptop giá cao", price=300000, condition="Good")
+
+    response = client.get(
+        "/api/products",
+        params={"condition": "Good", "min_price": "100000", "max_price": "300000"},
+    )
+
+    assert response.status_code == 200
+    assert {item["title"] for item in response.json()["data"]} == {
+        "Laptop giá thấp",
+        "Laptop giá cao",
+    }
+    assert response.json()["pagination"]["total_items"] == 2
+
+
+def test_list_sorts_by_price_with_stable_tie_breakers(client, seller_headers):
+    create(client, seller_headers, title="Giá 200 - trước", price=200000)
+    create(client, seller_headers, title="Giá 100", price=100000)
+    create(client, seller_headers, title="Giá 200 - sau", price=200000)
+    create(client, seller_headers, title="Giá 300", price=300000)
+
+    ascending = client.get("/api/products", params={"sort": "price_asc"})
+    descending = client.get("/api/products", params={"sort": "price_desc"})
+
+    assert ascending.status_code == 200
+    assert [item["title"] for item in ascending.json()["data"]] == [
+        "Giá 100",
+        "Giá 200 - sau",
+        "Giá 200 - trước",
+        "Giá 300",
+    ]
+    assert descending.status_code == 200
+    assert [item["title"] for item in descending.json()["data"]] == [
+        "Giá 300",
+        "Giá 200 - sau",
+        "Giá 200 - trước",
+        "Giá 100",
+    ]
+
+
+def test_list_rejects_invalid_advanced_filters(client):
+    assert client.get("/api/products", params={"condition": "Used"}).status_code == 422
+    assert client.get("/api/products", params={"sort": "random"}).status_code == 422
+    assert client.get(
+        "/api/products", params={"min_price": "200000", "max_price": "100000"}
+    ).status_code == 422
+    assert client.get("/api/products", params={"min_price": "10.999"}).status_code == 422
+
 def test_search_treats_percent_literally(client, seller_headers):
     create(client, seller_headers, title="Giảm 50% hôm nay")
     create(client, seller_headers, title="Bình thường")
