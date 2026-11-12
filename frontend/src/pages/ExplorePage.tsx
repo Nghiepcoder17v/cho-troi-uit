@@ -26,6 +26,9 @@ type ExplorePageProps = {
   onClearFilters: () => void;
   onPageChange: (value: number) => void;
   onViewProduct: (product: Product) => void;
+  favoriteIds: ReadonlySet<number>;
+  pendingFavoriteIds: ReadonlySet<number>;
+  onToggleFavorite: (productId: number) => void;
 };
 
 export function ExplorePage({
@@ -33,6 +36,7 @@ export function ExplorePage({
   minPrice, maxPrice, sort, hasActiveFilters, loading, onQueryChange, onSearch, onCategoryChange,
   onConditionChange, onMinPriceChange, onMaxPriceChange, onSortChange,
   onApplyFilters, onClearFilters, onPageChange, onViewProduct,
+  favoriteIds, pendingFavoriteIds, onToggleFavorite,
 }: ExplorePageProps) {
   const selectedCategory = categories.find((item) => item.category_id === categoryId);
 
@@ -91,7 +95,14 @@ export function ExplorePage({
         {hasActiveFilters && <button type="button" className="text-button explore-clear" onClick={onClearFilters}>Xóa bộ lọc</button>}
       </div>
 
-      {loading ? <div className="explore-loading" role="status">Đang tải sản phẩm…</div> : products.length > 0 ? <div className="product-grid">{products.map((product) => <ProductCard key={product.product_id} product={product} onView={() => onViewProduct(product)} />)}</div> : <EmptyState title="Chưa có sản phẩm phù hợp" description="Hãy thử thay đổi từ khóa hoặc bộ lọc để tìm thêm sản phẩm." />}
+      {loading ? <div className="explore-loading" role="status">Đang tải sản phẩm…</div> : products.length > 0 ? <div className="product-grid">{products.map((product) => <ProductCard
+        key={product.product_id}
+        product={product}
+        onView={() => onViewProduct(product)}
+        isFavorite={favoriteIds.has(product.product_id)}
+        favoriteBusy={pendingFavoriteIds.has(product.product_id)}
+        onToggleFavorite={() => onToggleFavorite(product.product_id)}
+      />)}</div> : <EmptyState title="Chưa có sản phẩm phù hợp" description="Hãy thử thay đổi từ khóa hoặc bộ lọc để tìm thêm sản phẩm." />}
 
       {!loading && pagination.total_pages > 1 && <nav className="pagination" aria-label="Phân trang sản phẩm">
         <button type="button" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>← Trước</button>

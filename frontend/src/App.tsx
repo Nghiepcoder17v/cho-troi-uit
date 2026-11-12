@@ -10,10 +10,12 @@ import { PublicProfilePage } from "./pages/PublicProfilePage";
 import { SellPage } from "./pages/SellPage";
 import {
   acceptTransaction,
+  addFavorite,
   buyProduct,
   cancelTransaction,
   confirmTransactionCompletion,
   getMe,
+  getMyFavorites,
   getMyProducts,
   getProduct,
   getPurchases,
@@ -23,8 +25,9 @@ import {
   listCategories,
   listProducts,
   logout,
+  removeFavorite,
 } from "./api";
-import type { Category, Condition, OrderAction, Pagination, Product, ProductSort, TransactionHistory, User } from "./types";
+import type { Category, Condition, FavoriteItem, OrderAction, Pagination, Product, ProductSort, TransactionHistory, User } from "./types";
 import { useTheme } from "./hooks/useTheme";
 
 function App() {
@@ -54,6 +57,9 @@ function App() {
   const [purchases, setPurchases] = useState<TransactionHistory[]>([]);
   const [sales, setSales] = useState<TransactionHistory[]>([]);
   const [myProducts, setMyProducts] = useState<Product[]>([]);
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [favoritesError, setFavoritesError] = useState("");
+  const [pendingFavoriteIds, setPendingFavoriteIds] = useState<Set<number>>(() => new Set());
   const [cart, setCart] = useState<Product[]>(() => {
     try { return JSON.parse(localStorage.getItem("cart") ?? "[]") as Product[]; } catch { return []; }
   });
@@ -85,6 +91,18 @@ function App() {
     }
   };
 
+  const refreshFavorites = async () => {
+    try {
+      const savedItems = await getMyFavorites();
+      setFavorites(savedItems);
+      setFavoritesError("");
+      return savedItems;
+    } catch (reason) {
+      setFavoritesError(reason instanceof Error ? reason.message : "Không thể tải danh sách đã lưu.");
+      throw reason;
+    }
+  };
+
   useEffect(() => {
     void listCategories()
       .then((loadedCategories) => setCategories(loadedCategories))
@@ -95,17 +113,27 @@ function App() {
     } catch {
       // Cookie authentication still works when browser storage is unavailable.
     }
-    void getMe().then(setUser).catch(() => setUser(null));
+    void getMe().then((nextUser) => {
+      setUser(nextUser);
+      void refreshFavorites().catch(() => undefined);
+    }).catch(() => {
+      setUser(null);
+      setFavorites([]);
+      setFavoritesError("");
+    });
   }, []);
 
   useEffect(() => {
     if (view === "explore") void refreshProducts();
-    if (view === "account" && user) void Promise.all([getMyProducts(), getPurchases(), getSales()]).then(([mine, bought, sold]) => {
-      setMyProducts(mine);
-      setPurchases(bought);
-      setSales(sold);
-    }).catch((reason) => setError(reason instanceof Error ? reason.message : "Không thể tải tài khoản"));
-  }, [view, category, page, submittedQuery, appliedCondition, appliedMinPrice, appliedMaxPrice, appliedSort]);
+    if (view === "account" && user) {
+      void Promise.all([getMyProducts(), getPurchases(), getSales()]).then(([mine, bought, sold]) => {
+        setMyProducts(mine);
+        setPurchases(bought);
+        setSales(sold);
+      }).catch((reason) => setError(reason instanceof Error ? reason.message : "Không thể tải tài khoản"));
+      void refreshFavorites().catch(() => undefined);
+    }
+  }, [view, user, category, page, submittedQuery, appliedCondition, appliedMinPrice, appliedMaxPrice, appliedSort]);
 
   const searchProducts = () => {
     const nextQuery = query.trim();
@@ -178,6 +206,43 @@ function App() {
     setMyProducts(mine);
     setPurchases(bought);
     setSales(sold);
+    await refreshFavorites().catch(() => undefined);
+  };
+
+  const toggleFavorite = async (productId: number) => {
+    if (!user) {
+      setAuthMode("login");
+      setShowAuth(true);
+      return;
+    }
+    if (pendingFavoriteIds.has(productId)) return;
+    const isSaved = favorites.some((item) => item.product_id === productId);
+    setPendingFavoriteIds((current) => new Set(current).add(productId));
+    try {
+      if (isSaved) await removeFavorite(productId);
+      else await addFavorite(productId);
+      await refreshFavorites();
+      setNotice(isSaved ? "Đã bỏ sản phẩm khỏi danh sách đã lưu." : "Đã lưu sản phẩm.");
+      setError("");
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Không thể cập nhật danh sách đã lưu.";
+      setFavoritesError(message);
+      setError(message);
+    } finally {
+      setPendingFavoriteIds((current) => {
+        const next = new Set(current);
+        next.delete(productId);
+        return next;
+      });
+    }
+  };
+
+  const openFavoriteProduct = async (productId: number) => {
+    try {
+      setSelectedProduct(await getProduct(productId));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Không thể mở sản phẩm đã lưu.");
+    }
   };
 
   const handleOrderAction = async (transactionId: number, action: OrderAction) => {
@@ -213,6 +278,8 @@ function App() {
     }
     localStorage.removeItem("cart");
     setCart([]);
+    setFavorites([]);
+    setFavoritesError("");
     setUser(null);
     setView("market");
     setPublicProfileUserId(null);
@@ -304,6 +371,8 @@ function App() {
     if (failures.length) setError(`Một số sản phẩm chưa gửi được yêu cầu:\n${failures.join("\n")}`);
   };
 
+  const favoriteIds = new Set(favorites.map((item) => item.product_id));
+
   return (
     <AppShell
       user={user}
@@ -344,6 +413,9 @@ function App() {
           || appliedMinPrice !== undefined || appliedMaxPrice !== undefined || appliedSort !== "newest"
         )}
         loading={loadingProducts}
+        favoriteIds={favoriteIds}
+        pendingFavoriteIds={pendingFavoriteIds}
+        onToggleFavorite={(productId) => void toggleFavorite(productId)}
         onQueryChange={setQuery}
         onSearch={searchProducts}
         onCategoryChange={exploreCategory}
@@ -363,6 +435,9 @@ function App() {
         purchases={purchases}
         sales={sales}
         cart={cart}
+        favorites={favorites}
+        favoritesError={favoritesError}
+        pendingFavoriteIds={pendingFavoriteIds}
         theme={theme}
         onToggleTheme={toggleTheme}
         onSignOut={signOut}
@@ -373,6 +448,9 @@ function App() {
         onProfileUpdated={saveMyProfile}
         onProductUpdated={handleProductUpdated}
         onOpenPublicProfile={openPublicProfile}
+        onRemoveFavorite={(productId) => void toggleFavorite(productId)}
+        onViewFavorite={(productId) => void openFavoriteProduct(productId)}
+        onBrowseMarketplace={() => setView("explore")}
       />}
       {view === "account" && !user && <div className="empty-state account-empty">Đăng nhập để xem tài khoản của bạn.</div>}
       {view === "public-profile" && publicProfileUserId !== null && <PublicProfilePage
@@ -382,12 +460,19 @@ function App() {
       />}
       {selectedProduct && <ProductDetailModal
         product={selectedProduct}
+        isFavorite={favoriteIds.has(selectedProduct.product_id)}
+        favoriteBusy={pendingFavoriteIds.has(selectedProduct.product_id)}
+        onToggleFavorite={() => void toggleFavorite(selectedProduct.product_id)}
         onClose={() => setSelectedProduct(null)}
         onAdd={() => { addToCart(selectedProduct); setSelectedProduct(null); }}
         onViewSeller={() => openPublicProfile(selectedProduct.seller.user_id)}
       />}
       {showCart && <CartDrawer cart={cart} onClose={() => setShowCart(false)} onRemove={removeFromCart} onCheckout={() => void checkout()} />}
-      {showAuth && <AuthModal mode={authMode} onClose={() => setShowAuth(false)} onModeChange={setAuthMode} onAuthenticated={(nextUser) => { setUser(nextUser); setShowAuth(false); }} />}
+      {showAuth && <AuthModal mode={authMode} onClose={() => setShowAuth(false)} onModeChange={setAuthMode} onAuthenticated={(nextUser) => {
+        setUser(nextUser);
+        setShowAuth(false);
+        void refreshFavorites().catch(() => undefined);
+      }} />}
     </AppShell>
   );
 }

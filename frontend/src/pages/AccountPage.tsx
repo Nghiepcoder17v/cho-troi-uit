@@ -1,12 +1,16 @@
 export function AccountView({
-  user, products, purchases, sales, cart, theme, onToggleTheme, onSignOut, onAction, onReviewSaved,
-  onRemoveCart, onCheckout, onProfileUpdated, onProductUpdated, onOpenPublicProfile,
+  user, products, purchases, sales, cart, favorites, favoritesError, pendingFavoriteIds, theme,
+  onToggleTheme, onSignOut, onAction, onReviewSaved, onRemoveCart, onCheckout, onProfileUpdated,
+  onProductUpdated, onOpenPublicProfile, onRemoveFavorite, onViewFavorite, onBrowseMarketplace,
 }: {
   user: User;
   products: Product[];
   purchases: TransactionHistory[];
   sales: TransactionHistory[];
   cart: Product[];
+  favorites: FavoriteItem[];
+  favoritesError: string;
+  pendingFavoriteIds: ReadonlySet<number>;
   theme: "dark" | "light";
   onToggleTheme: () => void;
   onSignOut: () => void;
@@ -17,6 +21,9 @@ export function AccountView({
   onProfileUpdated: (body: { full_name?: string; major?: string | null }) => Promise<User>;
   onProductUpdated: () => Promise<void>;
   onOpenPublicProfile: (id: number) => void;
+  onRemoveFavorite: (id: number) => void;
+  onViewFavorite: (id: number) => void;
+  onBrowseMarketplace: () => void;
 }) {
   const [section, setSection] = useState<AccountSection>("overview");
   const [reputation, setReputation] = useState<SellerReputation | null>(null);
@@ -60,6 +67,7 @@ export function AccountView({
           >
             <span aria-hidden="true">{item.icon}</span>{item.label}
             {item.id === "cart" && cart.length > 0 && <small>{cart.length}</small>}
+            {item.id === "favorites" && favorites.length > 0 && <small>{favorites.length}</small>}
           </button>)}
           <button type="button" className="account-public-link" onClick={() => onOpenPublicProfile(user.user_id)}>
             <span aria-hidden="true">↗</span>Trang cá nhân công khai
@@ -118,6 +126,40 @@ export function AccountView({
 
         {section === "profile" && <ProfileEditor user={user} onSave={onProfileUpdated} />}
         {section === "listings" && <ProductManagement products={products} onUpdated={onProductUpdated} />}
+        {section === "favorites" && <section className="account-section-content">
+          <section className="account-card">
+            <div className="section-heading">
+              <div><p className="eyebrow">WISHLIST</p><h2>Sản phẩm đã lưu</h2></div>
+              <span className="result-count">{favorites.length} mục</span>
+            </div>
+            {favoritesError && <p className="favorite-load-error" role="alert">{favoritesError}</p>}
+            {favorites.length ? <div className="favorite-items-list">
+              {favorites.map((item) => <article className="favorite-item-row" key={item.product_id}>
+                <span className={`mini-image image-${item.product_id % 4}`} aria-hidden="true">
+                  {item.product ? ["⌨", "◒", "▤", "✦"][item.product_id % 4] : "♡"}
+                </span>
+                <div className="favorite-item-copy">
+                  <strong>{item.product?.title ?? "Tin đăng đã ẩn"}</strong>
+                  <small>{item.product
+                    ? `${money.format(item.product.price)} · ${item.product.condition} · ${item.product.seller.full_name}`
+                    : "Tin này không còn hiển thị. Bạn vẫn có thể bỏ khỏi danh sách đã lưu."}</small>
+                  <span className={`managed-product-status status-${item.status.toLowerCase()}`}>
+                    {item.status === "Available" ? "Đang mở bán" : item.status === "Reserved" ? "Đang giữ chỗ" : item.status === "Sold" ? "Đã bán" : "Đã ẩn"}
+                  </span>
+                </div>
+                <div className="favorite-item-actions">
+                  {item.product && <button type="button" className="text-button" onClick={() => onViewFavorite(item.product_id)}>Xem sản phẩm</button>}
+                  <button type="button" className="text-button" disabled={pendingFavoriteIds.has(item.product_id)} onClick={() => onRemoveFavorite(item.product_id)}>
+                    {pendingFavoriteIds.has(item.product_id) ? "Đang xử lý…" : "Bỏ lưu"}
+                  </button>
+                </div>
+              </article>)}
+            </div> : <div className="favorite-empty-state">
+              <p className="muted">Bạn chưa lưu sản phẩm nào. Hãy mở Khám phá và nhấn biểu tượng trái tim trên tin đăng.</p>
+              <button type="button" className="outline-button" onClick={onBrowseMarketplace}>Khám phá sản phẩm</button>
+            </div>}
+          </section>
+        </section>}
         {section === "purchases" && <OrderListPanel title="Đơn mua" items={purchases} role="buyer" onAction={onAction} onReviewSaved={onReviewSaved} />}
         {section === "sales" && <OrderListPanel title="Đơn bán" items={sales} role="seller" onAction={onAction} onReviewSaved={onReviewSaved} />}
         {section === "cart" && <CartPanel cart={cart} onRemove={onRemoveCart} onCheckout={onCheckout} onBrowse={() => setSection("overview")} />}
@@ -128,19 +170,20 @@ export function AccountView({
 }
 import { useEffect, useState } from "react";
 import { getSellerReputation, getUserReviews } from "../api";
-import type { OrderAction, Product, Review, SellerReputation, TransactionHistory, User } from "../types";
+import type { FavoriteItem, OrderAction, Product, Review, SellerReputation, TransactionHistory, User } from "../types";
 import { money } from "../utils/format";
 import { AccountSettings, CartPanel } from "../components/account/AccountExtras";
 import { OrderSummary, ProductManagement, ProfileEditor } from "../components/account/AccountManagement";
 import { OrderListPanel } from "../components/account/OrderPanels";
 import { ReviewList } from "../components/ReviewList";
 
-type AccountSection = "overview" | "profile" | "listings" | "purchases" | "sales" | "cart" | "settings";
+type AccountSection = "overview" | "profile" | "listings" | "favorites" | "purchases" | "sales" | "cart" | "settings";
 
 const accountNavigation: { id: AccountSection; label: string; icon: string; description: string }[] = [
   { id: "overview", label: "Tổng quan", icon: "⌂", description: "Hoạt động và thống kê tài khoản" },
   { id: "profile", label: "Hồ sơ cá nhân", icon: "◎", description: "Thông tin tài khoản riêng tư" },
   { id: "listings", label: "Tin đăng của tôi", icon: "▤", description: "Quản lý sản phẩm đang đăng bán" },
+  { id: "favorites", label: "Đã lưu", icon: "♡", description: "Danh sách sản phẩm bạn quan tâm" },
   { id: "purchases", label: "Đơn mua", icon: "↓", description: "Theo dõi các yêu cầu mua" },
   { id: "sales", label: "Đơn bán", icon: "↑", description: "Xử lý các yêu cầu từ người mua" },
   { id: "cart", label: "Giỏ hàng", icon: "▣", description: "Sản phẩm bạn đang quan tâm" },

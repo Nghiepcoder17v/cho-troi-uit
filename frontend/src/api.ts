@@ -1,6 +1,7 @@
 import type {
   Category,
   Condition,
+  FavoriteItem,
   ProductSort,
   Pagination,
   Product,
@@ -80,6 +81,29 @@ export async function logout(): Promise<void> {
 
 export async function getMe(): Promise<User> {
   return (await request<Envelope<User>>("/api/users/me")).data;
+}
+
+export async function getMyFavorites(): Promise<FavoriteItem[]> {
+  const firstPage = await request<Envelope<FavoriteItem[]>>(
+    "/api/users/me/favorites?page=1&page_size=100",
+  );
+  const totalPages = firstPage.pagination?.total_pages ?? 1;
+  const remainingPages = await Promise.all(
+    Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) =>
+      request<Envelope<FavoriteItem[]>>(
+        `/api/users/me/favorites?page=${index + 2}&page_size=100`,
+      ),
+    ),
+  );
+  return [...firstPage.data, ...remainingPages.flatMap((page) => page.data)];
+}
+
+export async function addFavorite(productId: number): Promise<void> {
+  await request<Envelope<unknown>>(`/api/users/me/favorites/${productId}`, { method: "PUT" });
+}
+
+export async function removeFavorite(productId: number): Promise<void> {
+  await request(`/api/users/me/favorites/${productId}`, { method: "DELETE" });
 }
 
 export async function createProduct(body: {
