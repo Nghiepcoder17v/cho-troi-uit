@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { changeMyPassword } from "../../api";
 import type { Product } from "../../types";
 import { money } from "../../utils/format";
+import { ProductMediaGallery } from "../ProductMediaGallery";
 import { Button, Field } from "../primitives";
 
 export function CartPanel({ cart, onRemove, onCheckout, onBrowse }: {
@@ -16,7 +17,7 @@ export function CartPanel({ cart, onRemove, onCheckout, onBrowse }: {
     {cart.length ? <>
       <div className="account-toolbar"><div><strong>{cart.length} sản phẩm</strong><small>Giỏ hàng được lưu trên trình duyệt này.</small></div><strong className="account-cart-total">{money.format(total)}</strong></div>
       <div className="managed-product-list">{cart.map((item) => <article className="managed-product-card cart-managed-card" key={item.product_id}>
-        <span className={"mini-image image-" + (item.product_id % 4)}>{["⌨", "◒", "▤", "✦"][item.product_id % 4]}</span>
+        <span className={"mini-image image-" + (item.product_id % 4)}><ProductMediaGallery media={item.media} productId={item.product_id} productTitle={item.title} fallbackGlyph={["⌨", "◒", "▤", "✦"][item.product_id % 4]} mode="thumbnail" /></span>
         <div className="managed-product-copy"><strong>{item.title}</strong><small>{money.format(item.price)} · {item.seller.full_name}</small></div>
         <button type="button" className="text-button" onClick={() => onRemove(item.product_id)}>Xóa</button>
       </article>)}</div>
