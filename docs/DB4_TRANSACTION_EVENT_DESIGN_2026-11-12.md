@@ -122,7 +122,7 @@ Each `TransactionHistoryOut` item gains an `events` array:
 ```
 
 - Add `TransactionEventOut` and an events list to `TransactionHistoryOut`.
-- In `_transaction_history`, query events in bulk for returned transaction IDs, join actor users, group by transaction_id and order by occurred_at ASC, event_id ASC. Avoid N+1 queries.
+- In `_transaction_history`, query events in bulk for returned transaction IDs, **LEFT OUTER JOIN** actor users (system completion events have NULL actor), group by transaction_id and order by occurred_at ASC, event_id ASC. Avoid N+1 queries.
 - Existing endpoint scoping remains the access-control boundary: buyer sees only their purchases, seller sees only their sales. No unauthenticated or unscoped event endpoint.
 - Return an empty array for legacy transactions without event rows.
 - Do not expose arbitrary metadata.
