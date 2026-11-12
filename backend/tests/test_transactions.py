@@ -351,7 +351,7 @@ def test_non_participant_cannot_read_another_transactions_events(
 ):
     from conftest import register_and_login
 
-    transaction_id = buy(client, buyer_headers, product_id).json()["data"]["transaction_id"]
+    buy(client, buyer_headers, product_id)
     outsider_headers = register_and_login(client, "25520003")
     # No public event-by-id route exists; purchase history stays scoped to the caller.
     outsider_history = client.get("/api/transactions/purchases", headers=outsider_headers)
