@@ -120,7 +120,7 @@ export function ManagedProductCard({ product, editing, onEdit, onUpdated, onErro
 
   return <article className="managed-product-card">
     <div className="managed-product-summary">
-      <span className={"mini-image image-" + (product.product_id % 4)}>{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span>
+      <div className={"mini-image image-" + (product.product_id % 4)}><ProductMediaGallery media={product.media} productId={product.product_id} productTitle={product.title} fallbackGlyph={["⌨", "◒", "▤", "✦"][product.product_id % 4]} mode="thumbnail" /></div>
       <div className="managed-product-copy"><strong>{product.title}</strong><small>{money.format(product.price)} · {product.condition}</small></div>
       <span className={"managed-product-status status-" + product.status.toLowerCase()}>{product.status}</span>
     </div>
@@ -143,4 +143,5 @@ import type { FormEvent } from "react";
 import { updateProduct } from "../../api";
 import type { Condition, Product, TransactionHistory, User } from "../../types";
 import { conditions, money } from "../../utils/format";
+import { ProductMediaGallery } from "../ProductMediaGallery";
 

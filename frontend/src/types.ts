@@ -35,6 +35,18 @@ export interface Review extends ReviewMine {
   product_title: string;
 }
 
+export interface ProductMedia {
+  media_id: number;
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  width: number;
+  height: number;
+  sort_order: number;
+  is_cover: boolean;
+  alt_text: string | null;
+}
+
 export interface Product {
   product_id: number;
   category_id: number;
@@ -45,6 +57,7 @@ export interface Product {
   status: ProductStatus;
   created_at: string;
   seller: Seller;
+  media?: ProductMedia[];
 }
 
 export interface Category {

@@ -5,6 +5,7 @@ import { Skeleton, StatusBadge } from "./primitives";
 import type { Product, Review, SellerReputation } from "../types";
 import { money } from "../utils/format";
 import { ReviewList } from "./ReviewList";
+import { ProductMediaGallery } from "./ProductMediaGallery";
 
 type ProductDetailModalProps = {
   product: Product;
@@ -42,7 +43,7 @@ export function ProductDetailModal({ product, onClose, onAdd, onViewSeller }: Pr
     <section ref={dialogRef} className="detail-modal" role="dialog" aria-modal="true" aria-labelledby="product-detail-title" tabIndex={-1}>
       <button type="button" className="close-button" aria-label="Đóng chi tiết sản phẩm" onClick={onClose}>×</button>
       <div className={`detail-image image-${product.product_id % 4}`}>
-        <span className="image-glyph">{["⌨", "◒", "▤", "✦"][product.product_id % 4]}</span>
+        <ProductMediaGallery media={product.media} productId={product.product_id} productTitle={product.title} fallbackGlyph={["⌨", "◒", "▤", "✦"][product.product_id % 4]} mode="detail" />
       </div>
       <div className="detail-content">
         <p className="eyebrow">{product.condition} · Chi tiết sản phẩm</p>
