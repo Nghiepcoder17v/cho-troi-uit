@@ -13,6 +13,7 @@ type ExplorePageProps = {
   minPrice: string;
   maxPrice: string;
   sort: ProductSort;
+  hasActiveFilters: boolean;
   loading: boolean;
   onQueryChange: (value: string) => void;
   onSearch: () => void;
@@ -29,14 +30,11 @@ type ExplorePageProps = {
 
 export function ExplorePage({
   categories, products, page, pagination, query, categoryId, condition,
-  minPrice, maxPrice, sort, loading, onQueryChange, onSearch, onCategoryChange,
+  minPrice, maxPrice, sort, hasActiveFilters, loading, onQueryChange, onSearch, onCategoryChange,
   onConditionChange, onMinPriceChange, onMaxPriceChange, onSortChange,
   onApplyFilters, onClearFilters, onPageChange, onViewProduct,
 }: ExplorePageProps) {
   const selectedCategory = categories.find((item) => item.category_id === categoryId);
-  const hasActiveFilters = Boolean(
-    query || categoryId !== undefined || condition || minPrice || maxPrice || sort !== "newest",
-  );
 
   return <main className="explore-page">
     <section className="explore-heading">
