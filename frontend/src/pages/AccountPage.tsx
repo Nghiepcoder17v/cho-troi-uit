@@ -1,7 +1,7 @@
 export function AccountView({
   user, products, purchases, sales, cart, favorites, favoritesError, pendingFavoriteIds, theme,
   onToggleTheme, onSignOut, onAction, onReviewSaved, onRemoveCart, onCheckout, onProfileUpdated,
-  onProductUpdated, onOpenPublicProfile, onRemoveFavorite, onViewFavorite, onBrowseMarketplace,
+  onProductUpdated, onOpenPublicProfile, onRemoveFavorite, onViewFavorite, onBrowseMarketplace, onRefreshFavorites,
 }: {
   user: User;
   products: Product[];
@@ -24,6 +24,7 @@ export function AccountView({
   onRemoveFavorite: (id: number) => void;
   onViewFavorite: (id: number) => void;
   onBrowseMarketplace: () => void;
+  onRefreshFavorites: () => void;
 }) {
   const [section, setSection] = useState<AccountSection>("overview");
   const [reputation, setReputation] = useState<SellerReputation | null>(null);
@@ -154,6 +155,9 @@ export function AccountView({
                   </button>
                 </div>
               </article>)}
+            </div> : favoritesError ? <div className="favorite-empty-state">
+              <p className="muted">Danh sách đã lưu chưa tải được. Hãy kiểm tra kết nối hoặc trạng thái triển khai database rồi thử lại.</p>
+              <button type="button" className="outline-button" onClick={onRefreshFavorites}>Thử tải lại</button>
             </div> : <div className="favorite-empty-state">
               <p className="muted">Bạn chưa lưu sản phẩm nào. Hãy mở Khám phá và nhấn biểu tượng trái tim trên tin đăng.</p>
               <button type="button" className="outline-button" onClick={onBrowseMarketplace}>Khám phá sản phẩm</button>

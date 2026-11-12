@@ -280,6 +280,7 @@ function App() {
     setCart([]);
     setFavorites([]);
     setFavoritesError("");
+    setPendingFavoriteIds(new Set());
     setUser(null);
     setView("market");
     setPublicProfileUserId(null);
@@ -451,6 +452,7 @@ function App() {
         onRemoveFavorite={(productId) => void toggleFavorite(productId)}
         onViewFavorite={(productId) => void openFavoriteProduct(productId)}
         onBrowseMarketplace={() => setView("explore")}
+        onRefreshFavorites={() => void refreshFavorites().catch(() => undefined)}
       />}
       {view === "account" && !user && <div className="empty-state account-empty">Đăng nhập để xem tài khoản của bạn.</div>}
       {view === "public-profile" && publicProfileUserId !== null && <PublicProfilePage
