@@ -16,7 +16,7 @@ Tách landing page khỏi luồng khám phá sản phẩm và thêm trang Explor
 
 - Chỉ tìm kiếm khi nhấn nút hoặc Enter; thay đổi từ khóa chưa gửi không tự gọi API.
 - Danh mục, từ khóa và trang được gửi lên server; không lọc trên tập sản phẩm đã phân trang.
-- Filter theo tình trạng, khoảng giá và sort chờ DB-5/API tương ứng.
+- Tại thời điểm hoàn thành FE-2, filter theo tình trạng, khoảng giá và sort chưa được bật vì API chưa hỗ trợ; phần phụ thuộc này đã được hoàn tất trong DB-5 ngày 12/11/2026 (xem `DB5_MARKET_SEARCH_FILTERS_2026-11-12.md`).
 - Lỗi tải được báo bằng toast lỗi dùng chung của ứng dụng. Màn hình Explore có trạng thái tải và không có kết quả.
 
 ## Kiểm tra
@@ -28,3 +28,8 @@ Tách landing page khỏi luồng khám phá sản phẩm và thêm trang Explor
 
 - Branch: `feat/explore-page`
 - Chưa tạo commit hoặc PR trong báo cáo này.
+
+
+## Cập nhật DB-5 — 12/11/2026
+
+API và giao diện Explore hiện đã hỗ trợ lọc tình trạng, khoảng giá, sắp xếp mới nhất/giá tăng/giá giảm. Bộ lọc được gửi lên server và áp dụng trước pagination. Chi tiết API, validation, tests và giới hạn xác minh được ghi tại [DB5_MARKET_SEARCH_FILTERS_2026-11-12.md](DB5_MARKET_SEARCH_FILTERS_2026-11-12.md).
