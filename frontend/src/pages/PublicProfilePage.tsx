@@ -1,7 +1,10 @@
-export function PublicProfilePage({ userId, onBack, onViewProduct }: {
+export function PublicProfilePage({ userId, onBack, onViewProduct, favoriteIds, pendingFavoriteIds, onToggleFavorite }: {
   userId: number;
   onBack: () => void;
   onViewProduct: (product: Product) => void;
+  favoriteIds: ReadonlySet<number>;
+  pendingFavoriteIds: ReadonlySet<number>;
+  onToggleFavorite: (productId: number) => void;
 }) {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -40,7 +43,14 @@ export function PublicProfilePage({ userId, onBack, onViewProduct }: {
     <section className="public-profile-section">
       <div className="section-heading"><div><p className="eyebrow">GIAN HÀNG</p><h2>Tin đăng của {profile.full_name}</h2></div><span className="result-count">{filtered.length} sản phẩm</span></div>
       <div className="account-toolbar public-product-toolbar"><div><strong>Sản phẩm công khai</strong><small>Tin đang bán và sản phẩm đã bán.</small></div><select aria-label="Lọc sản phẩm công khai" value={filter} onChange={(event) => setFilter(event.target.value as "All" | "Available" | "Sold")}><option value="All">Tất cả</option><option value="Available">Đang bán</option><option value="Sold">Đã bán</option></select></div>
-      {filtered.length ? <div className="product-grid public-product-grid">{filtered.map((product) => <ProductCard key={product.product_id} product={product} onView={() => onViewProduct(product)} />)}</div> : <div className="empty-state">Người dùng chưa có tin đăng công khai trong nhóm này.</div>}
+      {filtered.length ? <div className="product-grid public-product-grid">{filtered.map((product) => <ProductCard
+        key={product.product_id}
+        product={product}
+        onView={() => onViewProduct(product)}
+        isFavorite={favoriteIds.has(product.product_id)}
+        favoriteBusy={pendingFavoriteIds.has(product.product_id)}
+        onToggleFavorite={() => onToggleFavorite(product.product_id)}
+      />)}</div> : <div className="empty-state">Người dùng chưa có tin đăng công khai trong nhóm này.</div>}
     </section>
     <section className="public-profile-section account-card">
       <div className="section-heading"><div><p className="eyebrow">UY TÍN</p><h2>Đánh giá từ cộng đồng</h2></div><span className="result-count">{reviews.length}</span></div>

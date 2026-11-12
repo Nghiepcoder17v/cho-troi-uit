@@ -457,6 +457,9 @@ function App() {
       {view === "account" && !user && <div className="empty-state account-empty">Đăng nhập để xem tài khoản của bạn.</div>}
       {view === "public-profile" && publicProfileUserId !== null && <PublicProfilePage
         userId={publicProfileUserId}
+        favoriteIds={favoriteIds}
+        pendingFavoriteIds={pendingFavoriteIds}
+        onToggleFavorite={(productId) => void toggleFavorite(productId)}
         onBack={() => setView(publicProfileReturnView)}
         onViewProduct={setSelectedProduct}
       />}
