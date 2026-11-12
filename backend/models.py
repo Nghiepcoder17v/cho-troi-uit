@@ -7,10 +7,12 @@ và để unit test (SQLite) kiểm tra được ràng buộc.
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -98,6 +100,51 @@ class Transaction(Base):
     product = relationship("Product")
     buyer = relationship("User")
 
+
+
+class TransactionEvent(Base):
+    """Append-only transaction timeline event; application code only inserts and reads."""
+
+    __tablename__ = "transaction_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('REQUEST_CREATED', 'SELLER_ACCEPTED', 'SELLER_REJECTED', "
+            "'BUYER_CANCELLED', 'SELLER_CANCELLED', 'BUYER_CONFIRMED', "
+            "'SELLER_CONFIRMED', 'TRANSACTION_COMPLETED')",
+            name="CHK_TransactionEvents_EventType",
+        ),
+        CheckConstraint(
+            "from_status IS NULL OR from_status IN ('Pending', 'Accepted', 'Completed', 'Cancelled')",
+            name="CHK_TransactionEvents_FromStatus",
+        ),
+        CheckConstraint(
+            "to_status IN ('Pending', 'Accepted', 'Completed', 'Cancelled')",
+            name="CHK_TransactionEvents_ToStatus",
+        ),
+        Index(
+            "IX_TransactionEvents_TransactionOccurred",
+            "transaction_id",
+            "occurred_at",
+            "event_id",
+        ),
+    )
+
+    # SQLite needs INTEGER (not BIGINT) to provide rowid-backed autoincrement in unit tests.
+    event_id = Column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    transaction_id = Column(
+        Integer,
+        ForeignKey("transactions.transaction_id"),
+        nullable=False,
+    )
+    actor_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    event_type = Column(String(32), nullable=False)
+    from_status = Column(String(20), nullable=True)
+    to_status = Column(String(20), nullable=False)
+    occurred_at = Column(DateTime, nullable=False, default=utcnow)
 
 
 class Review(Base):

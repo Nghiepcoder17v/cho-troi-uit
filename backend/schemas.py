@@ -10,6 +10,16 @@ ProductStatus = Literal["Available", "Reserved", "Sold", "Hidden"]
 ProductVisibility = Literal["Available", "Hidden"]
 PublicProductStatus = Literal["Available", "Sold"]
 ProductSort = Literal["newest", "price_asc", "price_desc"]
+TransactionEventType = Literal[
+    "REQUEST_CREATED",
+    "SELLER_ACCEPTED",
+    "SELLER_REJECTED",
+    "BUYER_CANCELLED",
+    "SELLER_CANCELLED",
+    "BUYER_CONFIRMED",
+    "SELLER_CONFIRMED",
+    "TRANSACTION_COMPLETED",
+]
 
 _EMAIL_RE = re.compile(r"^[a-z0-9._+-]+@gm\.uit\.edu\.vn$")
 _STUDENT_ID_RE = re.compile(r"^\d{8}$")
@@ -308,11 +318,23 @@ class TransactionOut(BaseModel):
     seller_confirmed_at: Optional[datetime] = None
 
 
+class TransactionEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    event_id: int
+    event_type: TransactionEventType
+    from_status: Optional[str] = None
+    to_status: str
+    occurred_at: datetime
+    actor: Optional[SellerOut] = None
+
+
 class TransactionHistoryOut(TransactionOut):
     product_title: str
     buyer: SellerOut
     seller: SellerOut
     my_review: Optional[ReviewMineOut] = None
+    events: list[TransactionEventOut] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------- ENVELOPES (theo API contract)
