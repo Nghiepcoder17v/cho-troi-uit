@@ -62,6 +62,26 @@ def test_list_filters_by_condition_and_inclusive_price_range(client, seller_head
     }
     assert response.json()["pagination"]["total_items"] == 2
 
+    second_page = client.get(
+        "/api/products",
+        params={
+            "condition": "Good",
+            "min_price": "100000",
+            "max_price": "300000",
+            "sort": "price_asc",
+            "page": 2,
+            "page_size": 1,
+        },
+    )
+    assert second_page.status_code == 200
+    assert second_page.json()["pagination"] == {
+        "current_page": 2,
+        "page_size": 1,
+        "total_items": 2,
+        "total_pages": 2,
+    }
+    assert [item["title"] for item in second_page.json()["data"]] == ["Laptop giá cao"]
+
 
 def test_list_sorts_by_price_with_stable_tie_breakers(client, seller_headers):
     create(client, seller_headers, title="Giá 200 - trước", price=200000)
