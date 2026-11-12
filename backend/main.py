@@ -1,5 +1,6 @@
 import math
 import os
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
@@ -172,28 +173,58 @@ def list_categories(db: Session = Depends(get_db)):
 
 @app.get("/api/products", response_model=schemas.ProductListEnvelope)
 def list_products(
-    category_id: Optional[int] = None,
+    category_id: Optional[int] = Query(None, ge=1),
     status: schemas.ProductStatus = "Available",
     q: Optional[str] = Query(None, max_length=100, description="Tìm theo tiêu đề"),
+    condition: Optional[schemas.Condition] = None,
+    min_price: Optional[Decimal] = Query(
+        None, ge=0, le=schemas.MAX_PRICE, max_digits=10, decimal_places=2
+    ),
+    max_price: Optional[Decimal] = Query(
+        None, ge=0, le=schemas.MAX_PRICE, max_digits=10, decimal_places=2
+    ),
+    sort: schemas.ProductSort = "newest",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     if status != "Available":  # chỉ tin sẵn sàng mới được xuất hiện trong chợ công khai
         raise HTTPException(status_code=400, detail="Chợ công khai chỉ liệt kê sản phẩm đang Available")
+    if min_price is not None and max_price is not None and min_price > max_price:
+        raise HTTPException(status_code=422, detail="Giá tối thiểu không được lớn hơn giá tối đa")
 
     conditions = [models.Product.status == status]
     if category_id is not None:
         conditions.append(models.Product.category_id == category_id)
-    if q:
+    if q and q.strip():
         conditions.append(models.Product.title.contains(q.strip(), autoescape=True))
+    if condition is not None:
+        conditions.append(models.Product.condition == condition)
+    if min_price is not None:
+        conditions.append(models.Product.price >= min_price)
+    if max_price is not None:
+        conditions.append(models.Product.price <= max_price)
+
+    order_by = {
+        "newest": (models.Product.created_at.desc(), models.Product.product_id.desc()),
+        "price_asc": (
+            models.Product.price.asc(),
+            models.Product.created_at.desc(),
+            models.Product.product_id.desc(),
+        ),
+        "price_desc": (
+            models.Product.price.desc(),
+            models.Product.created_at.desc(),
+            models.Product.product_id.desc(),
+        ),
+    }[sort]
 
     total = db.scalar(select(func.count()).select_from(models.Product).where(*conditions)) or 0
     rows = db.scalars(
         select(models.Product)
         .options(joinedload(models.Product.seller))
         .where(*conditions)
-        .order_by(models.Product.created_at.desc(), models.Product.product_id.desc())
+        .order_by(*order_by)
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()

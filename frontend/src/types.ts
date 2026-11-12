@@ -2,6 +2,7 @@ export type ProductStatus = "Available" | "Reserved" | "Sold" | "Hidden";
 export type TransactionStatus = "Pending" | "Accepted" | "Completed" | "Cancelled";
 export type OrderAction = "accept" | "reject" | "cancel" | "confirm-completion";
 export type Condition = "Brand New" | "Like New" | "Good" | "Fair";
+export type ProductSort = "newest" | "price_asc" | "price_desc";
 
 export interface Seller {
   user_id: number;

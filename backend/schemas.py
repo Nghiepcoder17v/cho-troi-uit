@@ -9,6 +9,7 @@ Condition = Literal["Brand New", "Like New", "Good", "Fair"]
 ProductStatus = Literal["Available", "Reserved", "Sold", "Hidden"]
 ProductVisibility = Literal["Available", "Hidden"]
 PublicProductStatus = Literal["Available", "Sold"]
+ProductSort = Literal["newest", "price_asc", "price_desc"]
 
 _EMAIL_RE = re.compile(r"^[a-z0-9._+-]+@gm\.uit\.edu\.vn$")
 _STUDENT_ID_RE = re.compile(r"^\d{8}$")

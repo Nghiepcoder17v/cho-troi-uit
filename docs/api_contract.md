@@ -122,11 +122,15 @@ hoặc cả hai; gửi `comment: null` để xóa nội dung bình luận. Khôn
 |---|---|---|
 | `category_id` | — | lọc theo danh mục |
 | `status` | `Available` | Chỉ `Available` được liệt kê công khai; giá trị khác → 400 |
-| `q` | — | tìm theo tiêu đề (chứa từ khoá, không phân biệt hoa thường) |
+| `q` | — | tìm theo tiêu đề (chứa từ khoá, không phân biệt hoa thường; tối đa 100 ký tự) |
+| `condition` | — | lọc chính xác theo `Brand New`, `Like New`, `Good` hoặc `Fair` |
+| `min_price` | — | giá tối thiểu, bao gồm biên; từ 0 đến 99.999.999,99; tối đa 2 chữ số thập phân |
+| `max_price` | — | giá tối đa, bao gồm biên; cùng giới hạn với `min_price` |
+| `sort` | `newest` | `newest`, `price_asc` hoặc `price_desc` |
 | `page` | 1 | ≥ 1 |
 | `page_size` | 20 | 1–100 |
 
-Sắp xếp mới nhất trước. **200 OK**
+Nếu đồng thời truyền `min_price` và `max_price`, giá tối thiểu phải nhỏ hơn hoặc bằng giá tối đa; ngược lại API trả 422. Tất cả bộ lọc được áp dụng trong truy vấn server trước khi đếm tổng và phân trang. Sắp xếp giá dùng thời gian đăng mới nhất rồi `product_id` giảm dần làm tiêu chí phụ để kết quả ổn định. **200 OK**
 ```json
 { "status": "success",
   "data": [ { "product_id": 15, "category_id": 3, "title": "Bàn phím cơ ATK V75X", "description": null,
