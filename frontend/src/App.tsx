@@ -125,7 +125,7 @@ function App() {
     const parsePrice = (value: string, label: string): number | undefined | null => {
       const normalized = value.trim();
       if (!normalized) return undefined;
-      if (!/^\\d+(?:\\.\\d{1,2})?$/.test(normalized)) {
+      if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
         setError(`${label} phải có tối đa 2 chữ số thập phân.`);
         return null;
       }
