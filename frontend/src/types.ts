@@ -72,6 +72,25 @@ export interface Pagination {
   total_pages: number;
 }
 
+export type TransactionEventType =
+  | "REQUEST_CREATED"
+  | "SELLER_ACCEPTED"
+  | "SELLER_REJECTED"
+  | "BUYER_CANCELLED"
+  | "SELLER_CANCELLED"
+  | "BUYER_CONFIRMED"
+  | "SELLER_CONFIRMED"
+  | "TRANSACTION_COMPLETED";
+
+export interface TransactionEvent {
+  event_id: number;
+  event_type: TransactionEventType;
+  from_status: TransactionStatus | null;
+  to_status: TransactionStatus;
+  occurred_at: string;
+  actor: Seller | null;
+}
+
 export interface TransactionHistory {
   transaction_id: number;
   product_id: number;
@@ -84,6 +103,7 @@ export interface TransactionHistory {
   buyer: Seller;
   seller: Seller;
   my_review: ReviewMine | null;
+  events: TransactionEvent[];
 }
 
 export interface User {
