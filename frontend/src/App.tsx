@@ -24,7 +24,7 @@ import {
   listProducts,
   logout,
 } from "./api";
-import type { Category, OrderAction, Pagination, Product, TransactionHistory, User } from "./types";
+import type { Category, Condition, OrderAction, Pagination, Product, ProductSort, TransactionHistory, User } from "./types";
 import { useTheme } from "./hooks/useTheme";
 
 function App() {
@@ -39,6 +39,14 @@ function App() {
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [category, setCategory] = useState<number | undefined>();
+  const [filterCondition, setFilterCondition] = useState<Condition | "">("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [sort, setSort] = useState<ProductSort>("newest");
+  const [appliedCondition, setAppliedCondition] = useState<Condition | undefined>();
+  const [appliedMinPrice, setAppliedMinPrice] = useState<number | undefined>();
+  const [appliedMaxPrice, setAppliedMaxPrice] = useState<number | undefined>();
+  const [appliedSort, setAppliedSort] = useState<ProductSort>("newest");
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<Pagination>({ current_page: 1, page_size: 12, total_items: 0, total_pages: 0 });
@@ -59,7 +67,15 @@ function App() {
     setLoadingProducts(true);
     try {
       setError("");
-      const result = await listProducts({ q: submittedQuery, category_id: category, page });
+      const result = await listProducts({
+        q: submittedQuery,
+        category_id: category,
+        condition: appliedCondition,
+        min_price: appliedMinPrice,
+        max_price: appliedMaxPrice,
+        sort: appliedSort,
+        page,
+      });
       setProducts(result.data);
       setPagination(result.pagination ?? { current_page: page, page_size: 12, total_items: result.data.length, total_pages: 1 });
     } catch (reason) {
@@ -89,7 +105,7 @@ function App() {
       setPurchases(bought);
       setSales(sold);
     }).catch((reason) => setError(reason instanceof Error ? reason.message : "Không thể tải tài khoản"));
-  }, [view, category, page, submittedQuery]);
+  }, [view, category, page, submittedQuery, appliedCondition, appliedMinPrice, appliedMaxPrice, appliedSort]);
 
   const searchProducts = () => {
     const nextQuery = query.trim();
@@ -105,12 +121,48 @@ function App() {
     setView("explore");
   };
 
+  const applyExploreFilters = () => {
+    const minimum = minPrice.trim() ? Number(minPrice) : undefined;
+    const maximum = maxPrice.trim() ? Number(maxPrice) : undefined;
+    if (minimum !== undefined && (!Number.isFinite(minimum) || minimum < 0)) {
+      setError("Giá tối thiểu phải là một số không âm hợp lệ.");
+      return;
+    }
+    if (maximum !== undefined && (!Number.isFinite(maximum) || maximum < 0)) {
+      setError("Giá tối đa phải là một số không âm hợp lệ.");
+      return;
+    }
+    if (minimum !== undefined && maximum !== undefined && minimum > maximum) {
+      setError("Giá tối thiểu không được lớn hơn giá tối đa.");
+      return;
+    }
+    setAppliedCondition(filterCondition || undefined);
+    setAppliedMinPrice(minimum);
+    setAppliedMaxPrice(maximum);
+    setAppliedSort(sort);
+    setPage(1);
+    setView("explore");
+    setError("");
+  };
+
   const clearExploreFilters = () => {
     setQuery("");
     setSubmittedQuery("");
     setCategory(undefined);
+    setFilterCondition("");
+    setMinPrice("");
+    setMaxPrice("");
+    setSort("newest");
+    setAppliedCondition(undefined);
+    setAppliedMinPrice(undefined);
+    setAppliedMaxPrice(undefined);
+    setAppliedSort("newest");
     setPage(1);
-    if (view === "explore" && page === 1 && submittedQuery === "" && category === undefined) void refreshProducts();
+    if (
+      view === "explore" && page === 1 && submittedQuery === "" && category === undefined
+      && appliedCondition === undefined && appliedMinPrice === undefined
+      && appliedMaxPrice === undefined && appliedSort === "newest"
+    ) void refreshProducts();
   };
 
   const refreshAccount = async () => {
@@ -274,10 +326,19 @@ function App() {
         pagination={pagination}
         query={query}
         categoryId={category}
+        condition={filterCondition}
+        minPrice={minPrice}
+        maxPrice={maxPrice}
+        sort={sort}
         loading={loadingProducts}
         onQueryChange={setQuery}
         onSearch={searchProducts}
         onCategoryChange={exploreCategory}
+        onConditionChange={setFilterCondition}
+        onMinPriceChange={setMinPrice}
+        onMaxPriceChange={setMaxPrice}
+        onSortChange={setSort}
+        onApplyFilters={applyExploreFilters}
         onClearFilters={clearExploreFilters}
         onPageChange={setPage}
         onViewProduct={setSelectedProduct}
