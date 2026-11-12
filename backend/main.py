@@ -560,6 +560,15 @@ def create_transaction(
     )
     db.add(transaction)
     try:
+        db.flush()
+        _record_transaction_event(
+            db,
+            transaction_id=transaction.transaction_id,
+            actor_user_id=current_user.user_id,
+            event_type="REQUEST_CREATED",
+            from_status=None,
+            to_status="Pending",
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -570,6 +579,29 @@ def create_transaction(
         "message": "Đã gửi yêu cầu mua. Sản phẩm đang được giữ chỗ chờ người bán phản hồi.",
         "data": transaction,
     }
+
+
+def _record_transaction_event(
+    db: Session,
+    *,
+    transaction_id: int,
+    actor_user_id: Optional[int],
+    event_type: str,
+    from_status: Optional[str],
+    to_status: str,
+    occurred_at=None,
+) -> None:
+    """Stage one immutable event in the current business transaction."""
+    db.add(
+        models.TransactionEvent(
+            transaction_id=transaction_id,
+            actor_user_id=actor_user_id,
+            event_type=event_type,
+            from_status=from_status,
+            to_status=to_status,
+            occurred_at=occurred_at or models.utcnow(),
+        )
+    )
 
 
 def _get_transaction_context(db: Session, transaction_id: int):
@@ -604,6 +636,14 @@ def accept_transaction(
     if changed.rowcount != 1:
         db.rollback()
         raise HTTPException(status_code=409, detail="Yêu cầu không còn ở trạng thái chờ người bán")
+    _record_transaction_event(
+        db,
+        transaction_id=transaction_id,
+        actor_user_id=current_user.user_id,
+        event_type="SELLER_ACCEPTED",
+        from_status="Pending",
+        to_status="Accepted",
+    )
     db.commit()
     db.refresh(transaction)
     return {"status": "success", "message": "Đã chấp nhận yêu cầu mua", "data": transaction}
@@ -642,6 +682,14 @@ def reject_transaction(
     if released.rowcount != 1:
         db.rollback()
         raise HTTPException(status_code=409, detail="Không thể giải phóng sản phẩm; trạng thái dữ liệu đã thay đổi")
+    _record_transaction_event(
+        db,
+        transaction_id=transaction_id,
+        actor_user_id=current_user.user_id,
+        event_type="SELLER_REJECTED",
+        from_status="Pending",
+        to_status="Cancelled",
+    )
     db.commit()
     db.refresh(transaction)
     return {"status": "success", "message": "Đã từ chối yêu cầu và mở bán lại sản phẩm", "data": transaction}
@@ -658,11 +706,14 @@ def cancel_transaction(
     is_seller = product.seller_id == current_user.user_id
     if not (is_buyer or is_seller):
         raise HTTPException(status_code=403, detail="Bạn không tham gia giao dịch này")
+    previous_status = transaction.status
+    if previous_status not in {"Pending", "Accepted"}:
+        raise HTTPException(status_code=409, detail="Giao dịch đã hoàn tất, đã hủy hoặc không thể hủy")
     changed = db.execute(
         update(models.Transaction)
         .where(
             models.Transaction.transaction_id == transaction_id,
-            models.Transaction.status.in_(("Pending", "Accepted")),
+            models.Transaction.status == previous_status,
         )
         .values(
             status="Cancelled",
@@ -687,6 +738,14 @@ def cancel_transaction(
     if released.rowcount != 1:
         db.rollback()
         raise HTTPException(status_code=409, detail="Không thể giải phóng sản phẩm; trạng thái dữ liệu đã thay đổi")
+    _record_transaction_event(
+        db,
+        transaction_id=transaction_id,
+        actor_user_id=current_user.user_id,
+        event_type="BUYER_CANCELLED" if is_buyer else "SELLER_CANCELLED",
+        from_status=previous_status,
+        to_status="Cancelled",
+    )
     db.commit()
     db.refresh(transaction)
     return {"status": "success", "message": "Đã hủy giao dịch và mở bán lại sản phẩm", "data": transaction}
@@ -763,6 +822,26 @@ def confirm_transaction_completion(
         if sold.rowcount != 1:
             db.rollback()
             raise HTTPException(status_code=409, detail="Không thể hoàn tất vì sản phẩm không còn ở trạng thái giữ chỗ")
+
+    _record_transaction_event(
+        db,
+        transaction_id=transaction_id,
+        actor_user_id=current_user.user_id,
+        event_type="BUYER_CONFIRMED" if is_buyer else "SELLER_CONFIRMED",
+        from_status="Accepted",
+        to_status=current_status,
+        occurred_at=now,
+    )
+    if current_status == "Completed":
+        _record_transaction_event(
+            db,
+            transaction_id=transaction_id,
+            actor_user_id=None,
+            event_type="TRANSACTION_COMPLETED",
+            from_status="Completed",
+            to_status="Completed",
+            occurred_at=now,
+        )
 
     db.commit()
     db.refresh(transaction)
@@ -873,6 +952,37 @@ def _transaction_history(
         .order_by(models.Transaction.transaction_date.desc(), models.Transaction.transaction_id.desc())
     ).all()
     transaction_ids = [transaction.transaction_id for transaction, *_ in rows]
+    events_by_transaction: dict[int, list[dict]] = {transaction_id: [] for transaction_id in transaction_ids}
+    if transaction_ids:
+        event_actor = aliased(models.User)
+        event_rows = db.execute(
+            select(models.TransactionEvent, event_actor)
+            .outerjoin(
+                event_actor,
+                models.TransactionEvent.actor_user_id == event_actor.user_id,
+            )
+            .where(models.TransactionEvent.transaction_id.in_(transaction_ids))
+            .order_by(
+                models.TransactionEvent.occurred_at.asc(),
+                models.TransactionEvent.event_id.asc(),
+            )
+        ).all()
+        for event, actor in event_rows:
+            events_by_transaction[event.transaction_id].append(
+                {
+                    "event_id": event.event_id,
+                    "event_type": event.event_type,
+                    "from_status": event.from_status,
+                    "to_status": event.to_status,
+                    "occurred_at": event.occurred_at,
+                    "actor": (
+                        {"user_id": actor.user_id, "full_name": actor.full_name}
+                        if actor is not None
+                        else None
+                    ),
+                }
+            )
+
     reviews = (
         db.scalars(
             select(models.Review).where(
@@ -911,6 +1021,7 @@ def _transaction_history(
                     if own_review
                     else None
                 ),
+                "events": events_by_transaction.get(transaction.transaction_id, []),
             }
         )
     return history
