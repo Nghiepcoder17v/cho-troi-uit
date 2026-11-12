@@ -69,6 +69,25 @@ này. Gửi `major: null` để xóa ngành học.
 Trả về user hiện tại sau cập nhật. Body rỗng hoặc gửi các trường ngoài phạm vi
 sẽ bị từ chối.
 
+### Danh sách sản phẩm đã lưu — `GET /api/users/me/favorites` 🔒
+Trả về danh sách riêng tư của tài khoản hiện tại, hỗ trợ `page` (mặc định 1)
+và `page_size` (mặc định 20, tối đa 100). Danh sách được sắp xếp theo
+`created_at DESC, product_id DESC`. Mỗi mục gồm `product_id`, `created_at`,
+`status` hiện tại và thông tin sản phẩm an toàn. Với sản phẩm `Hidden`, API
+giữ mục đã lưu nhưng trả `product: null` để không làm lộ tiêu đề, mô tả,
+giá hoặc người bán. Danh tính tài khoản luôn lấy từ cookie, không nhận user ID
+từ client.
+
+### Lưu sản phẩm — `PUT /api/users/me/favorites/{product_id}` 🔒
+Lưu sản phẩm đang hiển thị (`Available`, `Reserved` hoặc `Sold`). Tin
+`Hidden` hoặc không tồn tại trả 404. Gọi lặp lại là idempotent; không thay
+đổi thời điểm lưu ban đầu. Favorites chỉ thể hiện sự quan tâm, không giữ chỗ,
+không tạo giao dịch và không thay đổi trạng thái sản phẩm.
+
+### Bỏ lưu sản phẩm — `DELETE /api/users/me/favorites/{product_id}` 🔒
+Xóa quan hệ lưu của tài khoản hiện tại; trả 204 cả khi mục chưa tồn tại.
+Không ảnh hưởng tới sản phẩm hoặc Favorites của tài khoản khác.
+
 ### Đổi mật khẩu — `POST /api/users/me/change-password` 🔒
 Phải gửi mật khẩu hiện tại để xác minh; mật khẩu mới dài tối thiểu 8 ký tự và
 tối đa 72 byte UTF-8.

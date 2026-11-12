@@ -308,3 +308,157 @@ def test_sqlserver_filtered_unique_index_only_blocks_active_transactions(
         {"product_id": product_id},
     ).scalar_one()
     assert active_count == 1
+
+
+def test_sqlserver_user_favorites_schema_composite_key_and_foreign_keys(
+    sqlserver_connection: sa.Connection,
+):
+    connection = sqlserver_connection
+    table_id = connection.execute(
+        sa.text("SELECT OBJECT_ID(N'dbo.USER_FAVORITES', N'U')")
+    ).scalar_one_or_none()
+    assert table_id is not None, "Apply 20261113_user_favorites.sql before this test."
+
+    columns = {
+        row.name: (row.is_nullable, row.type_name, row.scale)
+        for row in connection.execute(
+            sa.text(
+                """
+                SELECT c.name, c.is_nullable, ty.name AS type_name, c.scale
+                FROM sys.columns c
+                JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+                WHERE c.object_id = OBJECT_ID(N'dbo.USER_FAVORITES')
+                """
+            )
+        )
+    }
+    assert columns == {
+        "user_id": (False, "int", 0),
+        "product_id": (False, "int", 0),
+        "created_at": (False, "datetime2", 0),
+    }
+
+    primary_key = connection.execute(
+        sa.text(
+            """
+            SELECT c.name
+            FROM sys.key_constraints kc
+            JOIN sys.index_columns ic
+              ON ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id
+            JOIN sys.columns c
+              ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+            WHERE kc.parent_object_id = OBJECT_ID(N'dbo.USER_FAVORITES')
+              AND kc.type = 'PK'
+            ORDER BY ic.key_ordinal
+            """
+        )
+    ).scalars().all()
+    assert primary_key == ["user_id", "product_id"]
+
+    foreign_keys = {
+        row.parent_column: (row.referenced_table, row.referenced_column, row.delete_action)
+        for row in connection.execute(
+            sa.text(
+                """
+                SELECT pc.name AS parent_column, rt.name AS referenced_table,
+                       rc.name AS referenced_column, fk.delete_referential_action_desc AS delete_action
+                FROM sys.foreign_keys fk
+                JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+                JOIN sys.columns pc ON pc.object_id = fkc.parent_object_id AND pc.column_id = fkc.parent_column_id
+                JOIN sys.tables rt ON rt.object_id = fkc.referenced_object_id
+                JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id
+                WHERE fk.parent_object_id = OBJECT_ID(N'dbo.USER_FAVORITES')
+                """
+            )
+        )
+    }
+    assert foreign_keys["user_id"] == ("USERS", "user_id", "NO_ACTION")
+    assert foreign_keys["product_id"] == ("PRODUCTS", "product_id", "NO_ACTION")
+
+    index_rows = connection.execute(
+        sa.text(
+            """
+            SELECT c.name, ic.is_descending_key
+            FROM sys.indexes i
+            JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+            JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+            WHERE i.object_id = OBJECT_ID(N'dbo.USER_FAVORITES')
+              AND i.name = N'IX_UserFavorites_UserCreated'
+              AND ic.key_ordinal > 0
+            ORDER BY ic.key_ordinal
+            """
+        )
+    ).all()
+    assert [(row.name, row.is_descending_key) for row in index_rows] == [
+        ("user_id", False), ("created_at", True), ("product_id", True)
+    ]
+
+    default_definition = connection.execute(
+        sa.text(
+            """
+            SELECT dc.definition
+            FROM sys.default_constraints dc
+            JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+            WHERE dc.parent_object_id = OBJECT_ID(N'dbo.USER_FAVORITES')
+              AND c.name = N'created_at'
+            """
+        )
+    ).scalar_one()
+    assert "SYSUTCDATETIME" in default_definition.upper()
+
+    user_id = _insert_user(connection)
+    category_id = connection.execute(
+        sa.text(
+            """
+            INSERT INTO dbo.CATEGORIES (category_name)
+            OUTPUT INSERTED.category_id
+            VALUES (:category_name)
+            """
+        ),
+        {"category_name": f"Favorites-{uuid.uuid4().hex[:10]}"},
+    ).scalar_one()
+    product_id = connection.execute(
+        sa.text(
+            """
+            INSERT INTO dbo.PRODUCTS
+                (seller_id, category_id, title, price, condition, status)
+            OUTPUT INSERTED.product_id
+            VALUES (:seller_id, :category_id, :title, 30000, 'Good', 'Available')
+            """
+        ),
+        {
+            "seller_id": user_id,
+            "category_id": category_id,
+            "title": f"Favorite integration {uuid.uuid4().hex[:8]}",
+        },
+    ).scalar_one()
+
+    created_at = connection.execute(
+        sa.text(
+            """
+            INSERT INTO dbo.USER_FAVORITES (user_id, product_id)
+            OUTPUT INSERTED.created_at
+            VALUES (:user_id, :product_id)
+            """
+        ),
+        {"user_id": user_id, "product_id": product_id},
+    ).scalar_one()
+    assert created_at is not None
+
+    with pytest.raises(IntegrityError):
+        with connection.begin_nested():
+            connection.execute(
+                sa.text(
+                    "INSERT INTO dbo.USER_FAVORITES (user_id, product_id) VALUES (:user_id, :product_id)"
+                ),
+                {"user_id": user_id, "product_id": product_id},
+            )
+
+    with pytest.raises(IntegrityError):
+        with connection.begin_nested():
+            connection.execute(
+                sa.text(
+                    "INSERT INTO dbo.USER_FAVORITES (user_id, product_id) VALUES (:user_id, :product_id)"
+                ),
+                {"user_id": user_id, "product_id": -999999},
+            )

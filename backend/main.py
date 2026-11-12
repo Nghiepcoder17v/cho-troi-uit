@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import case, func, select, text, update
+from sqlalchemy import case, delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload
 
@@ -145,6 +145,116 @@ def update_me(
     db.commit()
     db.refresh(current_user)
     return {"status": "success", "message": "Đã cập nhật hồ sơ cá nhân.", "data": current_user}
+
+
+@app.put("/api/users/me/favorites/{product_id}", response_model=schemas.MessageEnvelope)
+def add_favorite(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    # SQL Server holds an update/serializable lock through the insert transaction,
+    # so a seller cannot hide the listing between this check and the saved relation.
+    product = db.scalar(
+        select(models.Product)
+        .where(
+            models.Product.product_id == product_id,
+            models.Product.status != "Hidden",
+        )
+        .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if product is None:
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+
+    db.add(models.UserFavorite(user_id=current_user.user_id, product_id=product_id))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # Concurrent duplicate PUT is an idempotent success after the first insert commits.
+        existing = db.get(models.UserFavorite, (current_user.user_id, product_id))
+        if existing is not None:
+            return {"status": "success", "message": "Sản phẩm đã có trong danh sách đã lưu."}
+        latest_product = db.get(models.Product, product_id)
+        if latest_product is None or latest_product.status == "Hidden":
+            raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+        raise HTTPException(status_code=409, detail="Không thể lưu sản phẩm do dữ liệu vừa thay đổi")
+
+    return {"status": "success", "message": "Đã lưu sản phẩm."}
+
+
+@app.delete("/api/users/me/favorites/{product_id}", status_code=204)
+def remove_favorite(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    db.execute(
+        delete(models.UserFavorite).where(
+            models.UserFavorite.user_id == current_user.user_id,
+            models.UserFavorite.product_id == product_id,
+        )
+    )
+    db.commit()
+    return Response(status_code=204)
+
+
+@app.get("/api/users/me/favorites", response_model=schemas.FavoriteListEnvelope)
+def list_my_favorites(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    conditions = [models.UserFavorite.user_id == current_user.user_id]
+    total = db.scalar(
+        select(func.count())
+        .select_from(models.UserFavorite)
+        .where(*conditions)
+    ) or 0
+    rows = db.execute(
+        select(models.UserFavorite, models.Product, models.User)
+        .join(models.Product, models.UserFavorite.product_id == models.Product.product_id)
+        .join(models.User, models.Product.seller_id == models.User.user_id)
+        .where(*conditions)
+        .order_by(
+            models.UserFavorite.created_at.desc(),
+            models.UserFavorite.product_id.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+
+    data = []
+    for favorite, product, seller in rows:
+        hidden = product.status == "Hidden"
+        data.append(
+            {
+                "product_id": favorite.product_id,
+                "created_at": favorite.created_at,
+                "status": product.status,
+                # Hidden is a tombstone: no title, description, price, condition or seller data.
+                "product": None if hidden else {
+                    "product_id": product.product_id,
+                    "title": product.title,
+                    "price": product.price,
+                    "condition": product.condition,
+                    "status": product.status,
+                    "seller": {"user_id": seller.user_id, "full_name": seller.full_name},
+                },
+            }
+        )
+
+    return {
+        "status": "success",
+        "data": data,
+        "pagination": {
+            "current_page": page,
+            "page_size": page_size,
+            "total_items": total,
+            "total_pages": math.ceil(total / page_size),
+        },
+    }
 
 
 @app.post("/api/users/me/change-password", response_model=schemas.MessageEnvelope)

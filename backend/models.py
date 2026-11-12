@@ -11,6 +11,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    desc,
     ForeignKey,
     Index,
     Integer,
@@ -76,6 +77,24 @@ class Product(Base):
 
     seller = relationship("User")
     category = relationship("Category")
+
+
+class UserFavorite(Base):
+    """A private saved-product relation; duplicate prevention is the composite PK."""
+
+    __tablename__ = "user_favorites"
+    __table_args__ = (
+        Index(
+            "IX_UserFavorites_UserCreated",
+            "user_id",
+            desc("created_at"),
+            desc("product_id"),
+        ),
+    )
+
+    user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
+    product_id = Column(Integer, ForeignKey("products.product_id"), primary_key=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
 
 
 class Transaction(Base):
