@@ -55,6 +55,7 @@ export function OrderCard({
       {canCancel && <button type="button" className="outline-button" onClick={() => onAction(item.transaction_id, "cancel")}>Hủy giao dịch</button>}
       {item.status === "Accepted" && !waitingForMe && <small className="muted">Bạn đã xác nhận. Đang chờ bên còn lại.</small>}
     </div>
+    <TransactionTimeline item={item} role={role} />
     {item.status === "Completed" && <ReviewEditor item={item} role={role} onSaved={onReviewSaved} />}
   </article>;
 }
@@ -124,6 +125,67 @@ export function ReviewEditor({
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { createTransactionReview, updateReview } from "../../api";
-import type { OrderAction, TransactionHistory } from "../../types";
-import { money } from "../../utils/format";
+import type { OrderAction, TransactionEvent, TransactionEventType, TransactionHistory } from "../../types";
+import { formatUtcDateTime, money } from "../../utils/format";
+
+const transactionEventLabels: Record<TransactionEventType, string> = {
+  REQUEST_CREATED: "Yêu cầu mua được gửi",
+  SELLER_ACCEPTED: "Người bán chấp nhận yêu cầu",
+  SELLER_REJECTED: "Người bán từ chối yêu cầu",
+  BUYER_CANCELLED: "Người mua hủy giao dịch",
+  SELLER_CANCELLED: "Người bán hủy giao dịch",
+  BUYER_CONFIRMED: "Người mua xác nhận hoàn tất",
+  SELLER_CONFIRMED: "Người bán xác nhận hoàn tất",
+  TRANSACTION_COMPLETED: "Giao dịch hoàn tất",
+};
+
+function transactionEventActorLabel(
+  event: TransactionEvent,
+  item: TransactionHistory,
+  role: "buyer" | "seller",
+): string {
+  if (!event.actor) return "Hệ thống";
+
+  const myParty = role === "buyer" ? item.buyer : item.seller;
+  if (event.actor.user_id === myParty.user_id) return "Bạn";
+  if (event.actor.user_id === item.buyer.user_id) return `Người mua · ${event.actor.full_name}`;
+  if (event.actor.user_id === item.seller.user_id) return `Người bán · ${event.actor.full_name}`;
+  return event.actor.full_name;
+}
+
+function TransactionTimeline({
+  item,
+  role,
+}: {
+  item: TransactionHistory;
+  role: "buyer" | "seller";
+}) {
+  return (
+    <details className="transaction-timeline">
+      <summary>
+        <span>Lịch sử giao dịch</span>
+        <span className="timeline-count">{item.events.length} mốc</span>
+      </summary>
+      {item.events.length ? (
+        <ol className="transaction-timeline-list">
+          {item.events.map((event) => (
+            <li key={event.event_id}>
+              <div className="timeline-event-content">
+                <strong>{transactionEventLabels[event.event_type]}</strong>
+                <div className="timeline-event-meta">
+                  <span>{transactionEventActorLabel(event, item, role)}</span>
+                  <time dateTime={event.occurred_at}>{formatUtcDateTime(event.occurred_at)}</time>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="timeline-empty">
+          Giao dịch này được tạo trước khi hệ thống lưu lịch sử chi tiết.
+        </p>
+      )}
+    </details>
+  );
+}
 

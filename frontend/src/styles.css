@@ -1884,6 +1884,98 @@ footer span:first-child {
 .order-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .order-actions button { min-height: 36px; padding: 7px 12px; font-size: 11px; }
 .order-actions .muted { font-size: 11px; }
+
+.transaction-timeline {
+  padding-top: 11px;
+  border-top: 1px solid var(--color-border);
+}
+
+.transaction-timeline > summary {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.transaction-timeline > summary::-webkit-details-marker { display: none; }
+.transaction-timeline > summary::after {
+  content: "+";
+  margin-left: 2px;
+  color: var(--color-muted);
+  font-size: 17px;
+  line-height: 1;
+}
+.transaction-timeline[open] > summary::after { content: "−"; }
+.transaction-timeline > summary:focus-visible {
+  outline: 2px solid var(--color-info);
+  outline-offset: 3px;
+  border-radius: 5px;
+}
+.timeline-count {
+  margin-left: auto;
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.transaction-timeline-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.transaction-timeline-list li {
+  position: relative;
+  padding: 0 0 16px 20px;
+}
+.transaction-timeline-list li::before {
+  position: absolute;
+  top: 8px;
+  bottom: -2px;
+  left: 4px;
+  width: 1px;
+  background: var(--color-border-strong);
+  content: "";
+}
+.transaction-timeline-list li::after {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-info);
+  box-shadow: 0 0 0 1px var(--color-border-strong);
+  content: "";
+}
+.transaction-timeline-list li:last-child { padding-bottom: 0; }
+.transaction-timeline-list li:last-child::before { display: none; }
+.timeline-event-content { display: grid; gap: 5px; min-width: 0; }
+.timeline-event-content > strong {
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.timeline-event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+.timeline-event-meta time { font-variant-numeric: tabular-nums; }
+.timeline-empty {
+  margin: 10px 0 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 @media (max-width: 600px) {
   .pagination { gap: 10px; }
   .pagination button { padding-inline: 10px; font-size: 11px; }
