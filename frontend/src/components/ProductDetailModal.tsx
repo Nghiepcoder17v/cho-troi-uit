@@ -10,11 +10,16 @@ import { ProductMediaGallery } from "./ProductMediaGallery";
 type ProductDetailModalProps = {
   product: Product;
   onClose: () => void;
+  isFavorite: boolean;
+  favoriteBusy: boolean;
+  onToggleFavorite: () => void;
   onAdd: () => void;
   onViewSeller: () => void;
 };
 
-export function ProductDetailModal({ product, onClose, onAdd, onViewSeller }: ProductDetailModalProps) {
+export function ProductDetailModal({
+  product, isFavorite, favoriteBusy, onToggleFavorite, onClose, onAdd, onViewSeller,
+}: ProductDetailModalProps) {
   const dialogRef = useRef<HTMLElement>(null);
   const [reputation, setReputation] = useState<SellerReputation | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -52,6 +57,13 @@ export function ProductDetailModal({ product, onClose, onAdd, onViewSeller }: Pr
         </StatusBadge>
         <h2 id="product-detail-title">{product.title}</h2>
         <strong className="detail-price">{money.format(product.price)}</strong>
+        <button
+          type="button"
+          className="favorite-detail-toggle"
+          aria-pressed={isFavorite}
+          disabled={favoriteBusy}
+          onClick={onToggleFavorite}
+        >{isFavorite ? "♥ Đã lưu" : "♡ Lưu sản phẩm"}</button>
         <p className="detail-description">{product.description || "Người bán chưa thêm mô tả cho sản phẩm này."}</p>
         <div className="trust-card">
           <span className="trust-icon">✓</span>

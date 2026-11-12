@@ -47,6 +47,22 @@ export interface ProductMedia {
   alt_text: string | null;
 }
 
+export interface FavoriteProduct {
+  product_id: number;
+  title: string;
+  price: number;
+  condition: Condition;
+  status: ProductStatus;
+  seller: Seller;
+}
+
+export interface FavoriteItem {
+  product_id: number;
+  created_at: string;
+  status: ProductStatus;
+  product: FavoriteProduct | null;
+}
+
 export interface Product {
   product_id: number;
   category_id: number;
