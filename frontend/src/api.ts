@@ -1,6 +1,7 @@
 import type {
   Category,
   Condition,
+  ProductSort,
   Pagination,
   Product,
   ProductUpdatePayload,
@@ -33,11 +34,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export async function listProducts(params: {
   q?: string;
   category_id?: number;
+  condition?: Condition;
+  min_price?: number;
+  max_price?: number;
+  sort?: ProductSort;
   page?: number;
 }): Promise<Envelope<Product[]>> {
   const search = new URLSearchParams({ page: String(params.page ?? 1), page_size: "12" });
   if (params.q) search.set("q", params.q);
   if (params.category_id) search.set("category_id", String(params.category_id));
+  if (params.condition) search.set("condition", params.condition);
+  if (params.min_price !== undefined) search.set("min_price", String(params.min_price));
+  if (params.max_price !== undefined) search.set("max_price", String(params.max_price));
+  if (params.sort) search.set("sort", params.sort);
   return request(`/api/products?${search}`);
 }
 
