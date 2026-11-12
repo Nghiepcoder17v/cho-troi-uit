@@ -3015,3 +3015,71 @@ footer span:first-child {
   .explore-categories { flex-wrap: nowrap; overflow-x: auto; padding: 3px 2px 8px; }
   .explore-categories .category-pill { flex: 0 0 auto; }
 }
+
+/* FE-6: consistent interaction feedback */
+:where(
+  .ui-button,
+  .dark-button,
+  .outline-button,
+  .cart-button,
+  .buy-button,
+  .category-pill,
+  .pagination button,
+  .menu-toggle,
+  .nav-links button,
+  .text-button
+) {
+  transition-property: color, background-color, border-color, box-shadow, opacity, filter, transform;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: ease;
+}
+
+:where(
+  .ui-button,
+  .dark-button,
+  .outline-button,
+  .cart-button,
+  .buy-button,
+  .category-pill,
+  .pagination button,
+  .menu-toggle,
+  .nav-links button,
+  .text-button
+):active:not(:disabled) {
+  filter: brightness(0.96);
+  transform: translateY(1px);
+}
+
+.product-card:focus-within {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 22%, transparent);
+}
+
+.nav-links button[aria-current="page"] {
+  border-color: var(--color-border);
+  background: var(--color-surface-soft);
+  color: var(--color-text);
+  box-shadow: inset 0 -2px 0 var(--color-primary);
+}
+
+.category-pill[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  background: var(--color-surface-soft);
+  color: var(--color-text);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+@media (hover: none) {
+  .product-card:hover {
+    border-color: var(--color-border);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .category-pill:hover {
+    border-color: var(--color-border);
+    background: var(--color-surface);
+    transform: none;
+  }
+}
+
