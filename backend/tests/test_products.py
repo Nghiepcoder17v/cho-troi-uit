@@ -115,6 +115,9 @@ def test_list_rejects_invalid_advanced_filters(client):
         "/api/products", params={"min_price": "200000", "max_price": "100000"}
     ).status_code == 422
     assert client.get("/api/products", params={"min_price": "10.999"}).status_code == 422
+    assert client.get("/api/products", params={"max_price": "10.999"}).status_code == 422
+    assert client.get("/api/products", params={"min_price": "100000000"}).status_code == 422
+    assert client.get("/api/products", params={"max_price": "100000000"}).status_code == 422
 
 def test_search_treats_percent_literally(client, seller_headers):
     create(client, seller_headers, title="Giảm 50% hôm nay")
