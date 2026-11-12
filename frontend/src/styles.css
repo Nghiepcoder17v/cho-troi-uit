@@ -3251,3 +3251,23 @@ footer span:first-child {
     transition: none;
   }
 }
+
+.product-media-gallery--thumbnail {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.product-media-gallery--thumbnail .product-media-stage {
+  position: absolute;
+  inset: 0;
+}
+.product-media-gallery--thumbnail .product-media-source {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+}
+.product-media-gallery--thumbnail .image-glyph {
+  font-size: 20px;
+}
