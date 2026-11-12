@@ -42,6 +42,8 @@ Not implemented in this step:
 - `frontend/src/components/ProductMediaGallery.tsx` (new)
 - `frontend/src/components/ProductCard.tsx`
 - `frontend/src/components/ProductDetailModal.tsx`
+- `frontend/src/components/account/AccountExtras.tsx`
+- `frontend/src/components/account/AccountManagement.tsx`
 - `frontend/src/styles.css`
 
 ## 5. Verification
