@@ -6,7 +6,7 @@ type ProductMediaGalleryProps = {
   productId: number;
   productTitle: string;
   fallbackGlyph: string;
-  mode: "card" | "detail";
+  mode: "card" | "detail" | "thumbnail";
 };
 
 export function ProductMediaGallery({
@@ -52,7 +52,7 @@ export function ProductMediaGallery({
             className="product-media-source"
             src={activeMedia.url}
             alt={activeMedia.alt_text?.trim() || `${productTitle} — ảnh ${activeIndex + 1}`}
-            loading={mode === "card" ? "lazy" : "eager"}
+            loading={mode === "detail" ? "eager" : "lazy"}
             decoding="async"
             onError={() => markAsFailed(activeMedia.media_id)}
           />
