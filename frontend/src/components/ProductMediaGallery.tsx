@@ -19,13 +19,14 @@ export function ProductMediaGallery({
   const orderedMedia = [...(media ?? [])].sort(
     (a, b) => a.sort_order - b.sort_order || a.media_id - b.media_id,
   );
+  const mediaSignature = orderedMedia.map((item) => `${item.media_id}:${item.url}`).join("|");
   const [activeMediaId, setActiveMediaId] = useState<number | null>(null);
   const [failedMediaIds, setFailedMediaIds] = useState<Set<number>>(() => new Set());
 
   useEffect(() => {
     setActiveMediaId(null);
     setFailedMediaIds(new Set());
-  }, [productId]);
+  }, [productId, mediaSignature]);
 
   const availableMedia = orderedMedia.filter((item) => !failedMediaIds.has(item.media_id));
   const preferredMedia = availableMedia.find((item) => item.is_cover) ?? availableMedia[0];
