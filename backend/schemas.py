@@ -296,6 +296,22 @@ class Pagination(BaseModel):
     total_pages: int
 
 
+class FavoriteProductOut(BaseModel):
+    product_id: int
+    title: str
+    price: float
+    condition: Condition
+    status: ProductStatus
+    seller: SellerOut
+
+
+class FavoriteItemOut(BaseModel):
+    product_id: int
+    created_at: datetime
+    status: ProductStatus
+    product: Optional[FavoriteProductOut] = None
+
+
 class ProductCreated(BaseModel):
     product_id: int
 
@@ -369,6 +385,12 @@ class ProductCreatedEnvelope(BaseModel):
     status: str = "success"
     message: str
     data: ProductCreated
+
+
+class FavoriteListEnvelope(BaseModel):
+    status: str = "success"
+    data: list[FavoriteItemOut]
+    pagination: Pagination
 
 
 class TransactionEnvelope(BaseModel):
