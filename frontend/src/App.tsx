@@ -330,6 +330,11 @@ function App() {
         minPrice={minPrice}
         maxPrice={maxPrice}
         sort={sort}
+        hasActiveFilters={Boolean(
+          query || submittedQuery || category !== undefined || filterCondition || minPrice || maxPrice
+          || sort !== "newest" || appliedCondition !== undefined
+          || appliedMinPrice !== undefined || appliedMaxPrice !== undefined || appliedSort !== "newest"
+        )}
         loading={loadingProducts}
         onQueryChange={setQuery}
         onSearch={searchProducts}
