@@ -122,16 +122,24 @@ function App() {
   };
 
   const applyExploreFilters = () => {
-    const minimum = minPrice.trim() ? Number(minPrice) : undefined;
-    const maximum = maxPrice.trim() ? Number(maxPrice) : undefined;
-    if (minimum !== undefined && (!Number.isFinite(minimum) || minimum < 0)) {
-      setError("Giá tối thiểu phải là một số không âm hợp lệ.");
-      return;
-    }
-    if (maximum !== undefined && (!Number.isFinite(maximum) || maximum < 0)) {
-      setError("Giá tối đa phải là một số không âm hợp lệ.");
-      return;
-    }
+    const parsePrice = (value: string, label: string): number | undefined | null => {
+      const normalized = value.trim();
+      if (!normalized) return undefined;
+      if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
+        setError(`${label} phải có tối đa 2 chữ số thập phân.`);
+        return null;
+      }
+      const parsed = Number(normalized);
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 99999999.99) {
+        setError(`${label} phải nằm trong khoảng 0 đến 99.999.999,99.`);
+        return null;
+      }
+      return parsed;
+    };
+    const minimum = parsePrice(minPrice, "Giá tối thiểu");
+    if (minimum === null) return;
+    const maximum = parsePrice(maxPrice, "Giá tối đa");
+    if (maximum === null) return;
     if (minimum !== undefined && maximum !== undefined && minimum > maximum) {
       setError("Giá tối thiểu không được lớn hơn giá tối đa.");
       return;

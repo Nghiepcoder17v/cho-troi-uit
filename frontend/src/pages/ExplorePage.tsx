@@ -59,7 +59,7 @@ export function ExplorePage({
           {categories.map((item, index) => <button type="button" key={item.category_id} className={`category-pill category-${index % 4} ${categoryId === item.category_id ? "is-selected" : ""}`} aria-pressed={categoryId === item.category_id} onClick={() => onCategoryChange(item.category_id)}><span aria-hidden="true">{["▦", "⌁", "⌨", "✦"][index % 4]}</span>{item.category_name}</button>)}
         </div>
 
-        <div className="explore-filter-panel" aria-label="Bộ lọc nâng cao">
+        <div className="explore-filter-panel" role="group" aria-label="Bộ lọc nâng cao">
           <label className="explore-filter-field">
             <span>Tình trạng</span>
             <select value={condition} onChange={(event) => onConditionChange(event.target.value as Condition | "")}>
