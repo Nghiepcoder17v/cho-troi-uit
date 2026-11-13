@@ -177,6 +177,26 @@ def test_db6c_schema_and_open_report_index_cover_all_nonterminal_states(db6c_eng
         ).scalar_one()
         assert second_report_id != report_id
 
+        # This schema/index test commits only after deleting all of its own rows.
+        connection.execute(
+            sa.text("DELETE FROM dbo.PRODUCT_REPORTS WHERE reporter_user_id = :reporter"),
+            {"reporter": reporter_id},
+        )
+        connection.execute(
+            sa.text("DELETE FROM dbo.PRODUCTS WHERE product_id = :product"),
+            {"product": product_id},
+        )
+        connection.execute(
+            sa.text("DELETE FROM dbo.USERS WHERE user_id IN :ids").bindparams(
+                sa.bindparam("ids", expanding=True)
+            ),
+            {"ids": [reporter_id, seller_id]},
+        )
+        connection.execute(
+            sa.text("DELETE FROM dbo.CATEGORIES WHERE category_id = :id"),
+            {"id": _category_id},
+        )
+
 
 def test_db6c_api_checks_live_role_and_rolls_back_when_audit_insert_fails(db6c_engine):
     from database import get_db
