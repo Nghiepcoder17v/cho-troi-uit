@@ -156,7 +156,7 @@ def add_favorite(
     current_user: models.User = Depends(get_current_user),
 ):
     # SQL Server holds an update/serializable lock through the insert transaction,
-    # so a seller cannot hide the listing between this check and the saved relation.
+    # so seller visibility changes and moderation holds cannot race this saved relation.
     product = db.scalar(
         select(models.Product)
         .where(
@@ -1107,11 +1107,12 @@ def update_product(
 ):
     product = db.scalar(
         select(models.Product)
-        .options(joinedload(models.Product.seller))
+        .options(joinedload(models.Product.seller), joinedload(models.Product.moderation))
         .where(
             models.Product.product_id == product_id,
             models.Product.seller_id == current_user.user_id,
         )
+        .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
     )
     if product is None:
         raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
