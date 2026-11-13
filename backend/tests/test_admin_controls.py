@@ -14,9 +14,15 @@ def _user_id(client, headers):
 
 def _assign_role(session_factory, user_id, role_code):
     with session_factory() as session:
-        if session.get(models.Role, role_code) is None:
-            session.add(models.Role(role_code=role_code, description=f"Test {role_code}"))
-            session.flush()
+        for seeded_role in ("MODERATOR", "ADMIN"):
+            if session.get(models.Role, seeded_role) is None:
+                session.add(
+                    models.Role(
+                        role_code=seeded_role,
+                        description=f"Test {seeded_role}",
+                    )
+                )
+        session.flush()
         session.add(
             models.UserRoleAssignment(
                 user_id=user_id,
