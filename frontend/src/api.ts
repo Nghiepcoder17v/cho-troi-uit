@@ -1,4 +1,9 @@
 import type {
+  AdminRoleAssignment,
+  AdminRoleAssignmentEvent,
+  AdminRoleCode,
+  AdminUserSummary,
+  MyPermissions,
   Category,
   Condition,
   FavoriteItem,
@@ -225,4 +230,54 @@ export async function getPublicProducts(userId: number, status?: "Available" | "
   const query = new URLSearchParams({ page: "1", page_size: "100" });
   if (status) query.set("status", status);
   return (await request<Envelope<Product[]>>(`/api/users/${userId}/products?${query}`)).data;
+}
+
+
+export async function getMyPermissions(): Promise<MyPermissions> {
+  return (await request<Envelope<MyPermissions>>("/api/users/me/permissions")).data;
+}
+
+export async function searchAdminUsers(q: string): Promise<{ data: AdminUserSummary[]; pagination: Pagination }> {
+  const query = new URLSearchParams({ q, page: "1", page_size: "20" });
+  return request<Envelope<AdminUserSummary[]>>(`/api/admin/users?${query}`);
+}
+
+export async function getAdminRoleAssignments(
+  userId?: number,
+): Promise<{ data: AdminRoleAssignment[]; pagination: Pagination }> {
+  const query = new URLSearchParams({ include_revoked: "true", page: "1", page_size: "100" });
+  if (userId !== undefined) query.set("user_id", String(userId));
+  return request<Envelope<AdminRoleAssignment[]>>(`/api/admin/role-assignments?${query}`);
+}
+
+export async function getAdminRoleEvents(
+  userId?: number,
+): Promise<{ data: AdminRoleAssignmentEvent[]; pagination: Pagination }> {
+  const query = new URLSearchParams({ page: "1", page_size: "50" });
+  if (userId !== undefined) query.set("user_id", String(userId));
+  return request<Envelope<AdminRoleAssignmentEvent[]>>(`/api/admin/role-events?${query}`);
+}
+
+export async function grantAdminRole(
+  userId: number,
+  roleCode: AdminRoleCode,
+  reason: string,
+): Promise<AdminRoleAssignment> {
+  return (await request<Envelope<AdminRoleAssignment>>(`/api/admin/users/${userId}/roles`, {
+    method: "POST",
+    body: JSON.stringify({ role_code: roleCode, reason }),
+  })).data;
+}
+
+export async function revokeAdminRole(
+  assignmentId: number,
+  reason: string,
+): Promise<AdminRoleAssignment> {
+  return (await request<Envelope<AdminRoleAssignment>>(
+    `/api/admin/role-assignments/${assignmentId}/revoke`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    },
+  )).data;
 }
