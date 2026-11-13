@@ -287,7 +287,9 @@ class ProductOut(BaseModel):
     status: str
     created_at: datetime
     seller: SellerOut
-    # Present only in the authenticated seller's own product history.
+
+
+class ProductHistoryOut(ProductOut):
     moderation_status: Optional[Literal["Held"]] = None
 
 
@@ -571,7 +573,7 @@ class TransactionEnvelope(BaseModel):
 
 class ProductHistoryListEnvelope(BaseModel):
     status: str = "success"
-    data: list[ProductOut]
+    data: list[ProductHistoryOut]
     pagination: Pagination
 
 
