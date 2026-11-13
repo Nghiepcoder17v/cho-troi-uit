@@ -463,6 +463,7 @@ def test_sqlserver_user_favorites_schema_composite_key_and_foreign_keys(
                 {"user_id": user_id, "product_id": -999999},
             )
 
+
 def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
     sqlserver_connection: sa.Connection,
 ):
@@ -587,6 +588,12 @@ def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
             assert "email" not in item["product"]["seller"]
             assert "student_id" not in item["product"]["seller"]
 
+            outsider_add = client.put(
+                f"/api/users/me/favorites/{product_id}",
+                headers=outsider_headers,
+            )
+            assert outsider_add.status_code == 200, outsider_add.text
+
             outsider_list = client.get(
                 "/api/users/me/favorites",
                 headers=outsider_headers,
@@ -596,7 +603,7 @@ def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
                 headers=seller_headers,
             )
             assert outsider_list.status_code == seller_list.status_code == 200
-            assert outsider_list.json()["data"] == []
+            assert outsider_list.json()["data"][0]["product_id"] == product_id
             assert seller_list.json()["data"] == []
 
             hidden_update = connection.execute(
@@ -636,6 +643,14 @@ def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
             )
             assert empty_list.status_code == 200
             assert empty_list.json()["data"] == []
+
+            outsider_after_buyer_delete = client.get(
+                "/api/users/me/favorites",
+                headers=outsider_headers,
+            )
+            assert outsider_after_buyer_delete.status_code == 200
+            assert outsider_after_buyer_delete.json()["data"][0]["product_id"] == product_id
+            assert outsider_after_buyer_delete.json()["data"][0]["product"] is None
 
             transaction_count = connection.execute(
                 sa.text(
