@@ -34,6 +34,8 @@ def test_admin_role_endpoints_require_active_admin(client):
     assert client.get(
         "/api/admin/users", params={"q": "2552"}, headers=user_headers
     ).status_code == 403
+    assert client.get("/api/admin/role-assignments", headers=user_headers).status_code == 403
+    assert client.get("/api/admin/role-events", headers=user_headers).status_code == 403
 
     assert admin_id > 0
 
@@ -96,6 +98,28 @@ def test_admin_can_grant_revoke_and_review_role_history(
     assert client.get("/api/moderation/reports", headers=target_headers).status_code == 403
     assert client.get("/api/users/me/permissions", headers=target_headers).json()["data"]["role_codes"] == []
 
+    admin_grant = client.post(
+        f"/api/admin/users/{target_id}/roles",
+        headers=admin_headers,
+        json={"role_code": "ADMIN", "reason": "Approved admin responsibility"},
+    )
+    assert admin_grant.status_code == 201, admin_grant.text
+    admin_assignment_id = admin_grant.json()["data"]["assignment_id"]
+    assert client.get("/api/admin/role-events", headers=target_headers).status_code == 200
+    assert client.post(
+        f"/api/admin/role-assignments/{admin_assignment_id}/revoke",
+        headers=target_headers,
+        json={"reason": "Attempted self revoke"},
+    ).status_code == 400
+
+    admin_revoke = client.post(
+        f"/api/admin/role-assignments/{admin_assignment_id}/revoke",
+        headers=admin_headers,
+        json={"reason": "Administrator assignment ended"},
+    )
+    assert admin_revoke.status_code == 200, admin_revoke.text
+    assert client.get("/api/admin/role-events", headers=target_headers).status_code == 403
+
     assignments = client.get(
         "/api/admin/role-assignments",
         headers=admin_headers,
@@ -112,6 +136,8 @@ def test_admin_can_grant_revoke_and_review_role_history(
     )
     assert events.status_code == 200
     assert [event["event_code"] for event in reversed(events.json()["data"])] == [
+        "GRANTED",
+        "REVOKED",
         "GRANTED",
         "REVOKED",
     ]
