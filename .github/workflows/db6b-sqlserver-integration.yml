@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: db6b-sqlserver-\${{ github.workflow }}-\${{ github.ref }}
+  group: db6b-sqlserver-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -32,12 +32,12 @@ jobs:
         env:
           ACCEPT_EULA: "Y"
           MSSQL_PID: Developer
-          MSSQL_SA_PASSWORD: \${{ format('UIT-CI-{0}-Aa9!', github.run_id) }}
+          MSSQL_SA_PASSWORD: ${{ format('UIT-CI-{0}-Aa9!', github.run_id) }}
         ports:
           - 1433:1433
     env:
       RUN_SQLSERVER_INTEGRATION: "1"
-      SQLSERVER_TEST_DATABASE_URL: "mssql+pyodbc://sa:\${{ format('UIT-CI-{0}-Aa9%21', github.run_id) }}@127.0.0.1:1433/ChoTroUIT_DB6B_Test?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+      SQLSERVER_TEST_DATABASE_URL: "mssql+pyodbc://sa:${{ format('UIT-CI-{0}-Aa9%21', github.run_id) }}@127.0.0.1:1433/ChoTroUIT_DB6B_Test?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -62,10 +62,10 @@ jobs:
 
       - name: Wait for SQL Server and create isolated test database
         env:
-          MSSQL_SA_PASSWORD: \${{ format('UIT-CI-{0}-Aa9!', github.run_id) }}
+          MSSQL_SA_PASSWORD: ${{ format('UIT-CI-{0}-Aa9!', github.run_id) }}
         run: |
           set -euo pipefail
-          container_id="\${{ job.services.sqlserver.id }}"
+          container_id="${{ job.services.sqlserver.id }}"
           sqlcmd="/opt/mssql-tools18/bin/sqlcmd"
           ready=""
 
@@ -90,10 +90,10 @@ jobs:
 
       - name: Apply base schema only to the disposable test database
         env:
-          MSSQL_SA_PASSWORD: \${{ format('UIT-CI-{0}-Aa9!', github.run_id) }}
+          MSSQL_SA_PASSWORD: ${{ format('UIT-CI-{0}-Aa9!', github.run_id) }}
         run: |
           set -euo pipefail
-          container_id="\${{ job.services.sqlserver.id }}"
+          container_id="${{ job.services.sqlserver.id }}"
           docker cp database_scripts/01_init_schema.sql \
             "$container_id:/tmp/01_init_schema.sql"
           docker exec "$container_id" /opt/mssql-tools18/bin/sqlcmd \
@@ -102,10 +102,10 @@ jobs:
 
       - name: Apply additive migrations twice to verify idempotency
         env:
-          MSSQL_SA_PASSWORD: \${{ format('UIT-CI-{0}-Aa9!', github.run_id) }}
+          MSSQL_SA_PASSWORD: ${{ format('UIT-CI-{0}-Aa9!', github.run_id) }}
         run: |
           set -euo pipefail
-          container_id="\${{ job.services.sqlserver.id }}"
+          container_id="${{ job.services.sqlserver.id }}"
           for migration in \
             database_scripts/migrations/20261113_user_favorites.sql \
             database_scripts/migrations/20261113_product_reports.sql; do
