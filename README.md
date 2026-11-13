@@ -47,6 +47,7 @@ The project also includes an analytics data flow: operational records are stored
 | **Giao dịch / Transactions** | Yêu cầu mua, người bán chấp nhận/từ chối, hai bên xác nhận hoàn tất. / Purchase requests, seller decisions, and confirmation by both parties. |
 | **Uy tín / Reputation** | Đánh giá hai chiều sau giao dịch hoàn tất. / Bilateral reviews after completed transactions. |
 | **Account Center** | Quản lý hồ sơ, tin đăng, đơn mua/bán, giỏ hàng và cài đặt. / Manage profile, listings, purchases, sales, cart, and settings. |
+| **Moderation & Admin Controls** | Báo cáo tin đăng, hàng đợi kiểm duyệt và moderation hold; ADMIN quản lý vai trò MODERATOR/ADMIN có audit. / Listing reports, moderation queue and holds; ADMIN manages MODERATOR/ADMIN roles with an audit trail. |
 | **Data Warehouse** | Star Schema và lịch sử sản phẩm SCD Type 2. / Star Schema with SCD Type 2 product history. |
 | **ETL & Analytics** | ETL tăng dần, watermark, retry, run log và báo cáo SQL. / Incremental ETL, watermarks, retries, run logs, and SQL reports. |
 
@@ -324,6 +325,8 @@ docker compose --env-file .env.compose logs -f etl-scheduler
 
 Hướng dẫn chi tiết: [Docker Compose](docs/DOCKER_COMPOSE.md) · [ETL Automation](docs/ETL_AUTOMATION.md).
 
+> **Lưu ý bảo mật:** Docker Compose hiện dùng SQL Server `sa` cho môi trường local/dev. Không tái sử dụng cấu hình này cho môi trường dùng chung hoặc production; production phải dùng application principal riêng, không thuộc `sysadmin`/`db_owner`, và principal triển khai schema riêng.
+
 ## ETL và Analytics
 
 Chạy ETL từ thư mục gốc sau khi cấu hình <code>DATABASE_URL</code> và <code>DWH_DATABASE_URL</code>:
@@ -392,6 +395,7 @@ Hướng dẫn SQL Server integration tests: [docs/SQLSERVER_INTEGRATION_TESTING
 - Email đăng ký phải thuộc miền <code>@gm.uit.edu.vn</code>; MSSV gồm đúng 8 chữ số và khớp phần trước <code>@</code> của email.
 - Trang cá nhân công khai không trả email, MSSV hoặc password hash.
 - SQL Server sử dụng foreign key, CHECK constraint, unique constraint và filtered unique index để bảo vệ tính toàn vẹn.
+- Quyền MODERATOR/ADMIN được đọc từ assignment còn hiệu lực trong database ở từng request; tài khoản ADMIN đầu tiên vẫn phải được bootstrap qua operator/DBA được phê duyệt.
 - ETL ghi nhận dòng bị từ chối và trạng thái mỗi lần chạy; không âm thầm nạp dữ liệu lỗi.
 
 - Passwords are hashed with bcrypt; session JWTs are stored in <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite=Lax</code> cookies.
@@ -419,6 +423,12 @@ Hướng dẫn SQL Server integration tests: [docs/SQLSERVER_INTEGRATION_TESTING
 | <code>POST</code> | <code>/api/transactions/{id}/reviews</code> | Đánh giá sau giao dịch / Submit post-transaction review |
 | <code>GET</code> | <code>/api/transactions/purchases</code> | Đơn mua / Purchases |
 | <code>GET</code> | <code>/api/transactions/sales</code> | Đơn bán / Sales |
+| <code>GET</code> | <code>/api/users/me/permissions</code> | Vai trò hiện hành của tài khoản / Current role assignments |
+| <code>GET</code> | <code>/api/admin/users?q=...</code> | Tìm tài khoản trong khu vực ADMIN / Search accounts for role management |
+| <code>GET</code> | <code>/api/admin/role-assignments</code> | Lịch sử phân quyền / Role assignment history |
+| <code>GET</code> | <code>/api/admin/role-events</code> | Audit cấp/thu hồi quyền / Role grant and revoke audit |
+| <code>POST</code> | <code>/api/admin/users/{user_id}/roles</code> | Cấp MODERATOR hoặc ADMIN / Grant MODERATOR or ADMIN |
+| <code>POST</code> | <code>/api/admin/role-assignments/{assignment_id}/revoke</code> | Thu hồi vai trò / Revoke a role assignment |
 
 API contract đầy đủ: [docs/api_contract.md](docs/api_contract.md). Tài liệu API tương tác có tại <code>/docs</code> khi backend đang chạy.
 
@@ -428,6 +438,8 @@ Full API contract: [docs/api_contract.md](docs/api_contract.md). Interactive API
 
 - [API Contract](docs/api_contract.md) — request/response definitions and business rules.
 - [SQL Server Integration Testing](docs/SQLSERVER_INTEGRATION_TESTING.md) — test setup, safeguards, and verification record.
+- [DB-6C Moderator Bootstrap](docs/DB6C_MODERATOR_BOOTSTRAP_RUNBOOK.md) — operator-controlled initial ADMIN bootstrap.
+- [DB-6D Admin Controls](docs/DB6D_ADMIN_CONTROLS_RUNBOOK.md) — role management and production SQL principal prerequisites.
 - [Docker Compose](docs/DOCKER_COMPOSE.md) — local container deployment and database initialization.
 - [ETL Automation](docs/ETL_AUTOMATION.md) — scheduler, retry, watermark, and run monitoring.
 - [DWH SCD Type 2](docs/DWH_SCD2.md) — product history model and migration.
@@ -437,17 +449,17 @@ Full API contract: [docs/api_contract.md](docs/api_contract.md). Interactive API
 
 ## Trạng thái dự án | Project Status
 
-Các mốc kỹ thuật Step 1–15 và phần mở rộng DWH/analytics đã được triển khai trên nhánh <code>main</code>. Repository có CI cho backend, data pipeline và frontend; tài liệu kiểm thử tích hợp ghi lại phạm vi xác minh SQL Server, Docker Compose và các luồng giao dịch.
+Các mốc kỹ thuật Step 1–15 và phần mở rộng DWH/analytics, DB-6A Favorites, DB-6B Reports, DB-6C Moderation và DB-6D Admin Controls đã được triển khai trên nhánh <code>main</code>. CI xác minh backend, data pipeline, frontend và các workflow SQL Server chạy trên database kiểm thử riêng; việc triển khai lên application database vẫn cần quy trình backup/restore và phê duyệt vận hành.
 
-Core milestones (Steps 1–15) and the DWH/analytics extensions have been implemented on <code>main</code>. The repository includes CI for backend, data pipeline, and frontend; supporting test documents record SQL Server, Docker Compose, and transaction-flow verification.
+Core milestones (Steps 1–15), DWH/analytics, DB-6A Favorites, DB-6B Reports, DB-6C Moderation and DB-6D Admin Controls are implemented on <code>main</code>. CI verifies the backend, data pipeline, frontend and SQL Server workflows on isolated test databases; deployment to the application database still requires backup/restore verification and operational approval.
 
 **Ngoài phạm vi hiện tại / Current exclusions**
 
-- Chưa có role admin/moderator hoặc quy trình kiểm duyệt và báo cáo vi phạm.
+- Chưa có khóa tài khoản, xóa tài khoản, quy trình kháng nghị (appeals), hoặc thao tác phân quyền hàng loạt.
 - Không tích hợp thanh toán, vận chuyển hoặc theo dõi giao hàng.
 - Thanh toán và bàn giao được hai bên tự thỏa thuận bên ngoài nền tảng.
 
-- Admin/moderator roles and listing moderation/reporting are not implemented.
+- Account suspension, account deletion, appeals, and bulk role operations are out of scope.
 - Payment, shipping, and delivery tracking are not integrated.
 - Buyers and sellers arrange payment and handover independently outside the platform.
 
