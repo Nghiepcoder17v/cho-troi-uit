@@ -20,6 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Unicode,
     UnicodeText,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -95,6 +96,62 @@ class UserFavorite(Base):
     user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
     product_id = Column(Integer, ForeignKey("products.product_id"), primary_key=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class ProductReport(Base):
+    """Private product-report intake. Only the submitting user owns the report."""
+
+    __tablename__ = "product_reports"
+    __table_args__ = (
+        CheckConstraint(
+            "reason_code IN ('PROHIBITED_ITEM', 'MISLEADING_LISTING', "
+            "'SUSPECTED_SCAM', 'SPAM_OR_DUPLICATE', 'OTHER')",
+            name="CHK_ProductReports_ReasonCode",
+        ),
+        CheckConstraint("status IN ('Submitted')", name="CHK_ProductReports_Status"),
+        Index(
+            "IX_ProductReports_ReporterSubmitted",
+            "reporter_user_id",
+            desc("submitted_at"),
+            desc("report_id"),
+        ),
+        Index(
+            "IX_ProductReports_StatusSubmitted",
+            "status",
+            "submitted_at",
+            "report_id",
+        ),
+        Index(
+            "UX_ProductReports_ReporterTargetOpen",
+            "reporter_user_id",
+            "target_product_id",
+            unique=True,
+            mssql_where=text("status = 'Submitted'"),
+            sqlite_where=text("status = 'Submitted'"),
+        ),
+    )
+
+    # SQLite uses INTEGER for rowid-backed autoincrement in unit tests.
+    report_id = Column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    reporter_user_id = Column(
+        Integer,
+        ForeignKey("users.user_id", name="FK_ProductReports_Reporter"),
+        nullable=False,
+    )
+    target_product_id = Column(
+        Integer,
+        ForeignKey("products.product_id", name="FK_ProductReports_Product"),
+        nullable=False,
+    )
+    reason_code = Column(String(32), nullable=False)
+    description = Column(Unicode(500), nullable=True)
+    status = Column(String(16), nullable=False, default="Submitted")
+    submitted_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
 
 class Transaction(Base):
