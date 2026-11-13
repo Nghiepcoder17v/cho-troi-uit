@@ -100,7 +100,7 @@ jobs:
             -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b \
             -d ChoTroUIT_DB6A_Test -i /tmp/01_init_schema.sql
 
-      - name: Apply DB6A, DB6B and DB6C migrations twice to verify idempotency
+      - name: Apply DB6A, DB6B, DB6C and DB6D migrations twice to verify idempotency
         env:
           MSSQL_SA_PASSWORD: ${{ format('UIT-CI-{0}-Aa9!', github.run_id) }}
         run: |
