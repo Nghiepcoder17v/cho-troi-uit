@@ -683,10 +683,13 @@ def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
                 cleanup.execute(
                     sa.text(
                         """
-                        DELETE FROM dbo.TRANSACTION_EVENTS
-                        WHERE transaction_id IN (
-                            SELECT transaction_id FROM dbo.TRANSACTIONS WHERE product_id = :product_id
-                        )
+                        IF OBJECT_ID(N'dbo.TRANSACTION_EVENTS', N'U') IS NOT NULL
+                        BEGIN
+                            DELETE FROM dbo.TRANSACTION_EVENTS
+                            WHERE transaction_id IN (
+                                SELECT transaction_id FROM dbo.TRANSACTIONS WHERE product_id = :product_id
+                            );
+                        END
                         """
                     ),
                     {"product_id": product_id},
