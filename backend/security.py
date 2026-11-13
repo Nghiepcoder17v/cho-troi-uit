@@ -93,3 +93,20 @@ def require_moderator(
     if "MODERATOR" in role_codes:
         return current_user, "MODERATOR"
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền kiểm duyệt")
+
+
+def require_admin(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> models.User:
+    """Require an active ADMIN role resolved from the database on every request."""
+    is_admin = db.scalar(
+        select(models.UserRoleAssignment.assignment_id).where(
+            models.UserRoleAssignment.user_id == current_user.user_id,
+            models.UserRoleAssignment.role_code == "ADMIN",
+            models.UserRoleAssignment.revoked_at.is_(None),
+        )
+    )
+    if is_admin is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Chỉ ADMIN được phép thực hiện thao tác này")
+    return current_user

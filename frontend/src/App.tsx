@@ -8,6 +8,7 @@ import { MarketPage } from "./pages/MarketPage";
 import { ExplorePage } from "./pages/ExplorePage";
 import { PublicProfilePage } from "./pages/PublicProfilePage";
 import { SellPage } from "./pages/SellPage";
+import { AdminControlsPage } from "./pages/AdminControlsPage";
 import {
   acceptTransaction,
   addFavorite,
@@ -15,6 +16,7 @@ import {
   cancelTransaction,
   confirmTransactionCompletion,
   getMe,
+  getMyPermissions,
   getMyFavorites,
   getMyProducts,
   getProduct,
@@ -27,11 +29,13 @@ import {
   logout,
   removeFavorite,
 } from "./api";
-import type { Category, Condition, FavoriteItem, OrderAction, Pagination, Product, ProductSort, TransactionHistory, User } from "./types";
+import type { AdminRoleCode, Category, Condition, FavoriteItem, OrderAction, Pagination, Product, ProductSort, TransactionHistory, User } from "./types";
 import { useTheme } from "./hooks/useTheme";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [roleCodes, setRoleCodes] = useState<AdminRoleCode[]>([]);
+  const isAdmin = roleCodes.includes("ADMIN");
   const [view, setView] = useState<AppView>("market");
   const [publicProfileUserId, setPublicProfileUserId] = useState<number | null>(null);
   const [publicProfileReturnView, setPublicProfileReturnView] = useState<"market" | "explore" | "account" | "public-profile">("market");
@@ -113,17 +117,32 @@ function App() {
     } catch {
       // Cookie authentication still works when browser storage is unavailable.
     }
-    void getMe().then((nextUser) => {
+    void getMe().then(async (nextUser) => {
       setUser(nextUser);
+      try {
+        setRoleCodes((await getMyPermissions()).role_codes);
+      } catch {
+        setRoleCodes([]);
+      }
       void refreshFavorites().catch(() => undefined);
     }).catch(() => {
       setUser(null);
+      setRoleCodes([]);
       setFavorites([]);
       setFavoritesError("");
     });
   }, []);
 
   useEffect(() => {
+    if (view === "admin" && user) {
+      void getMyPermissions().then((permissions) => {
+        setRoleCodes(permissions.role_codes);
+        if (!permissions.role_codes.includes("ADMIN")) setView("account");
+      }).catch(() => {
+        setRoleCodes([]);
+        setView("account");
+      });
+    }
     if (view === "explore") void refreshProducts();
     if (view === "account" && user) {
       void Promise.all([getMyProducts(), getPurchases(), getSales()]).then(([mine, bought, sold]) => {
@@ -282,10 +301,19 @@ function App() {
     setFavoritesError("");
     setPendingFavoriteIds(new Set());
     setUser(null);
+    setRoleCodes([]);
     setView("market");
     setPublicProfileUserId(null);
     setShowCart(false);
     setError(logoutFailed ? "Không thể xác nhận đăng xuất với máy chủ. Hãy thử lại." : "");
+  };
+
+  const navigate = (nextView: AppView) => {
+    if (nextView === "admin" && (!user || !isAdmin)) {
+      setView("account");
+      return;
+    }
+    setView(nextView);
   };
 
   const openPublicProfile = (userId: number) => {
@@ -377,12 +405,13 @@ function App() {
   return (
     <AppShell
       user={user}
+      isAdmin={isAdmin}
       view={view}
       mobileNavOpen={mobileNavOpen}
       cartCount={cart.length}
       notice={notice}
       error={error}
-      onNavigate={setView}
+      onNavigate={navigate}
       onOpenLogin={() => { setAuthMode("login"); setShowAuth(true); }}
       onOpenCart={() => { setShowCart(true); setMobileNavOpen(false); }}
       onToggleMenu={() => setMobileNavOpen((open) => !open)}
@@ -455,6 +484,8 @@ function App() {
         onRefreshFavorites={() => void refreshFavorites().catch(() => undefined)}
       />}
       {view === "account" && !user && <div className="empty-state account-empty">Đăng nhập để xem tài khoản của bạn.</div>}
+      {view === "admin" && user && isAdmin && <AdminControlsPage currentUserId={user.user_id} />}
+      {view === "admin" && (!user || !isAdmin) && <div className="empty-state account-empty">Bạn không có quyền truy cập khu vực quản trị.</div>}
       {view === "public-profile" && publicProfileUserId !== null && <PublicProfilePage
         userId={publicProfileUserId}
         favoriteIds={favoriteIds}
@@ -475,6 +506,8 @@ function App() {
       {showCart && <CartDrawer cart={cart} onClose={() => setShowCart(false)} onRemove={removeFromCart} onCheckout={() => void checkout()} />}
       {showAuth && <AuthModal mode={authMode} onClose={() => setShowAuth(false)} onModeChange={setAuthMode} onAuthenticated={(nextUser) => {
         setUser(nextUser);
+        setRoleCodes([]);
+        void getMyPermissions().then((permissions) => setRoleCodes(permissions.role_codes)).catch(() => setRoleCodes([]));
         setShowAuth(false);
         void refreshFavorites().catch(() => undefined);
       }} />}

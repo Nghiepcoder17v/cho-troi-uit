@@ -488,6 +488,106 @@ class ModerationMessageEnvelope(BaseModel):
     message: str
 
 
+# ---------------------------------------------------------------- ADMIN CONTROLS (DB-6D)
+AdminRoleCode = Literal["MODERATOR", "ADMIN"]
+
+
+class MyPermissionsOut(BaseModel):
+    role_codes: list[AdminRoleCode] = Field(default_factory=list)
+
+
+class MyPermissionsEnvelope(BaseModel):
+    status: str = "success"
+    data: MyPermissionsOut
+
+
+class AdminUserSummary(BaseModel):
+    user_id: int
+    student_id: str
+    email: str
+    full_name: str
+    created_at: datetime
+
+
+class AdminRoleAssignmentOut(BaseModel):
+    assignment_id: int
+    user: AdminUserSummary
+    role_code: AdminRoleCode
+    granted_at: datetime
+    granted_by_user_id: Optional[int] = None
+    granted_by_name: Optional[str] = None
+    grant_reason: str
+    revoked_at: Optional[datetime] = None
+    revoked_by_user_id: Optional[int] = None
+    revoked_by_name: Optional[str] = None
+    revoke_reason: Optional[str] = None
+
+
+class AdminRoleAssignmentEventOut(BaseModel):
+    event_id: int
+    assignment_id: int
+    target_user: AdminUserSummary
+    role_code: AdminRoleCode
+    actor_user_id: int
+    actor_name: str
+    actor_role_code: AdminRoleCode
+    event_code: Literal["GRANTED", "REVOKED"]
+    reason: str
+    occurred_at: datetime
+
+
+class AdminRoleGrantRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_code: AdminRoleCode
+    reason: str = Field(..., min_length=8, max_length=250)
+
+    @field_validator("reason")
+    @classmethod
+    def _normalize_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 8:
+            raise ValueError("Lý do phải có ít nhất 8 ký tự")
+        return value
+
+
+class AdminRoleRevokeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=8, max_length=250)
+
+    @field_validator("reason")
+    @classmethod
+    def _normalize_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 8:
+            raise ValueError("Lý do phải có ít nhất 8 ký tự")
+        return value
+
+
+class AdminUserListEnvelope(BaseModel):
+    status: str = "success"
+    data: list[AdminUserSummary]
+    pagination: Pagination
+
+
+class AdminRoleAssignmentListEnvelope(BaseModel):
+    status: str = "success"
+    data: list[AdminRoleAssignmentOut]
+    pagination: Pagination
+
+
+class AdminRoleAssignmentEventListEnvelope(BaseModel):
+    status: str = "success"
+    data: list[AdminRoleAssignmentEventOut]
+    pagination: Pagination
+
+
+class AdminRoleAssignmentEnvelope(BaseModel):
+    status: str = "success"
+    data: AdminRoleAssignmentOut
+
+
 # ---------------------------------------------------------------- TRANSACTION
 class TransactionCreate(BaseModel):
     product_id: int

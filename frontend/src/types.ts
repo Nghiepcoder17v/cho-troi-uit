@@ -143,6 +143,47 @@ export interface PublicProfile {
   label: string;
 }
 
+export type AdminRoleCode = "MODERATOR" | "ADMIN";
+
+export interface MyPermissions {
+  role_codes: AdminRoleCode[];
+}
+
+export interface AdminUserSummary {
+  user_id: number;
+  student_id: string;
+  email: string;
+  full_name: string;
+  created_at: string;
+}
+
+export interface AdminRoleAssignment {
+  assignment_id: number;
+  user: AdminUserSummary;
+  role_code: AdminRoleCode;
+  granted_at: string;
+  granted_by_user_id: number | null;
+  granted_by_name: string | null;
+  grant_reason: string;
+  revoked_at: string | null;
+  revoked_by_user_id: number | null;
+  revoked_by_name: string | null;
+  revoke_reason: string | null;
+}
+
+export interface AdminRoleAssignmentEvent {
+  event_id: number;
+  assignment_id: number;
+  target_user: AdminUserSummary;
+  role_code: AdminRoleCode;
+  actor_user_id: number;
+  actor_name: string;
+  actor_role_code: AdminRoleCode;
+  event_code: "GRANTED" | "REVOKED";
+  reason: string;
+  occurred_at: string;
+}
+
 export interface ProductUpdatePayload {
   category_id?: number;
   title?: string;

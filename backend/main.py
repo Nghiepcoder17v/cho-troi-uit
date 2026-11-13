@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import case, delete, func, select, text, true, update
+from sqlalchemy import case, delete, func, or_, select, text, true, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload
 
@@ -19,6 +19,7 @@ from security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     get_current_user,
+    require_admin,
     require_moderator,
     hash_password,
     verify_password,
@@ -739,6 +740,384 @@ def release_product_moderation_hold(
     )
     db.commit()
     return {"status": "success", "message": "Đã gỡ moderation hold; trạng thái giao dịch không thay đổi."}
+
+
+
+
+# ==========================================================================
+# ADMIN CONTROLS (DB-6D)
+# ==========================================================================
+def _admin_user_summary(user: models.User) -> dict:
+    return {
+        "user_id": user.user_id,
+        "student_id": user.student_id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "created_at": user.created_at,
+    }
+
+
+def _admin_role_assignment_data(
+    assignment: models.UserRoleAssignment,
+    target: models.User,
+    granted_by: Optional[models.User],
+    revoked_by: Optional[models.User],
+) -> dict:
+    return {
+        "assignment_id": assignment.assignment_id,
+        "user": _admin_user_summary(target),
+        "role_code": assignment.role_code,
+        "granted_at": assignment.granted_at,
+        "granted_by_user_id": assignment.granted_by_user_id,
+        "granted_by_name": granted_by.full_name if granted_by else None,
+        "grant_reason": assignment.grant_reason,
+        "revoked_at": assignment.revoked_at,
+        "revoked_by_user_id": assignment.revoked_by_user_id,
+        "revoked_by_name": revoked_by.full_name if revoked_by else None,
+        "revoke_reason": assignment.revoke_reason,
+    }
+
+
+def _admin_role_event_data(
+    event: models.UserRoleAssignmentEvent,
+    target: models.User,
+    actor: models.User,
+) -> dict:
+    return {
+        "event_id": event.event_id,
+        "assignment_id": event.assignment_id,
+        "target_user": _admin_user_summary(target),
+        "role_code": event.role_code,
+        "actor_user_id": event.actor_user_id,
+        "actor_name": actor.full_name,
+        "actor_role_code": event.actor_role_code,
+        "event_code": event.event_code,
+        "reason": event.reason,
+        "occurred_at": event.occurred_at,
+    }
+
+
+def _lock_admin_actor_role(db: Session, current_admin: models.User) -> models.Role:
+    """Serialize role-management mutations and re-check authority under SQL locks."""
+    admin_role = db.scalar(
+        select(models.Role)
+        .where(models.Role.role_code == "ADMIN")
+        .with_hint(models.Role, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if admin_role is None:
+        raise HTTPException(status_code=403, detail="Vai trò ADMIN chưa được khởi tạo")
+    active_assignment = db.scalar(
+        select(models.UserRoleAssignment)
+        .where(
+            models.UserRoleAssignment.user_id == current_admin.user_id,
+            models.UserRoleAssignment.role_code == "ADMIN",
+            models.UserRoleAssignment.revoked_at.is_(None),
+        )
+        .with_hint(models.UserRoleAssignment, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if active_assignment is None:
+        raise HTTPException(status_code=403, detail="Quyền ADMIN đã bị thu hồi")
+    return admin_role
+
+
+@app.get("/api/users/me/permissions", response_model=schemas.MyPermissionsEnvelope)
+def get_my_permissions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    role_codes = db.scalars(
+        select(models.UserRoleAssignment.role_code).where(
+            models.UserRoleAssignment.user_id == current_user.user_id,
+            models.UserRoleAssignment.revoked_at.is_(None),
+        )
+    ).all()
+    return {
+        "status": "success",
+        "data": {"role_codes": sorted(set(role_codes))},
+    }
+
+
+@app.get("/api/admin/users", response_model=schemas.AdminUserListEnvelope)
+def search_admin_users(
+    q: str = Query(..., min_length=2, max_length=100),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(require_admin),
+):
+    term = q.strip()
+    if len(term) < 2:
+        raise HTTPException(status_code=422, detail="Từ khóa tìm kiếm phải có ít nhất 2 ký tự")
+    conditions = [
+        or_(
+            models.User.full_name.contains(term, autoescape=True),
+            models.User.student_id.contains(term, autoescape=True),
+            models.User.email.contains(term, autoescape=True),
+        )
+    ]
+    total = db.scalar(
+        select(func.count()).select_from(models.User).where(*conditions)
+    ) or 0
+    users = db.scalars(
+        select(models.User)
+        .where(*conditions)
+        .order_by(models.User.full_name.asc(), models.User.user_id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return {
+        "status": "success",
+        "data": [_admin_user_summary(user) for user in users],
+        "pagination": {
+            "current_page": page,
+            "page_size": page_size,
+            "total_items": total,
+            "total_pages": math.ceil(total / page_size),
+        },
+    }
+
+
+@app.get("/api/admin/role-assignments", response_model=schemas.AdminRoleAssignmentListEnvelope)
+def list_admin_role_assignments(
+    user_id: Optional[int] = Query(None, ge=1),
+    role_code: Optional[schemas.AdminRoleCode] = None,
+    include_revoked: bool = False,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(require_admin),
+):
+    grant_actor = aliased(models.User)
+    revoke_actor = aliased(models.User)
+    conditions = []
+    if user_id is not None:
+        conditions.append(models.UserRoleAssignment.user_id == user_id)
+    if role_code is not None:
+        conditions.append(models.UserRoleAssignment.role_code == role_code)
+    if not include_revoked:
+        conditions.append(models.UserRoleAssignment.revoked_at.is_(None))
+
+    total = db.scalar(
+        select(func.count())
+        .select_from(models.UserRoleAssignment)
+        .where(*conditions)
+    ) or 0
+    rows = db.execute(
+        select(models.UserRoleAssignment, models.User, grant_actor, revoke_actor)
+        .join(models.User, models.UserRoleAssignment.user_id == models.User.user_id)
+        .outerjoin(grant_actor, models.UserRoleAssignment.granted_by_user_id == grant_actor.user_id)
+        .outerjoin(revoke_actor, models.UserRoleAssignment.revoked_by_user_id == revoke_actor.user_id)
+        .where(*conditions)
+        .order_by(
+            models.UserRoleAssignment.granted_at.desc(),
+            models.UserRoleAssignment.assignment_id.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return {
+        "status": "success",
+        "data": [
+            _admin_role_assignment_data(assignment, target, granted_by, revoked_by)
+            for assignment, target, granted_by, revoked_by in rows
+        ],
+        "pagination": {
+            "current_page": page,
+            "page_size": page_size,
+            "total_items": total,
+            "total_pages": math.ceil(total / page_size),
+        },
+    }
+
+
+@app.get("/api/admin/role-events", response_model=schemas.AdminRoleAssignmentEventListEnvelope)
+def list_admin_role_events(
+    user_id: Optional[int] = Query(None, ge=1),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(require_admin),
+):
+    target_user = aliased(models.User)
+    actor_user = aliased(models.User)
+    conditions = []
+    if user_id is not None:
+        conditions.append(models.UserRoleAssignmentEvent.target_user_id == user_id)
+    total = db.scalar(
+        select(func.count())
+        .select_from(models.UserRoleAssignmentEvent)
+        .where(*conditions)
+    ) or 0
+    rows = db.execute(
+        select(models.UserRoleAssignmentEvent, target_user, actor_user)
+        .join(target_user, models.UserRoleAssignmentEvent.target_user_id == target_user.user_id)
+        .join(actor_user, models.UserRoleAssignmentEvent.actor_user_id == actor_user.user_id)
+        .where(*conditions)
+        .order_by(
+            models.UserRoleAssignmentEvent.occurred_at.desc(),
+            models.UserRoleAssignmentEvent.event_id.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return {
+        "status": "success",
+        "data": [
+            _admin_role_event_data(event, target, actor)
+            for event, target, actor in rows
+        ],
+        "pagination": {
+            "current_page": page,
+            "page_size": page_size,
+            "total_items": total,
+            "total_pages": math.ceil(total / page_size),
+        },
+    }
+
+
+@app.post("/api/admin/users/{user_id}/roles", response_model=schemas.AdminRoleAssignmentEnvelope, status_code=201)
+def grant_admin_managed_role(
+    user_id: int,
+    body: schemas.AdminRoleGrantRequest,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(require_admin),
+):
+    _lock_admin_actor_role(db, current_admin)
+    if user_id == current_admin.user_id:
+        raise HTTPException(status_code=400, detail="ADMIN không thể tự thay đổi quyền của chính mình")
+
+    target = db.scalar(
+        select(models.User)
+        .where(models.User.user_id == user_id)
+        .with_hint(models.User, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if target is None:
+        raise HTTPException(status_code=404, detail="Tài khoản không tồn tại")
+    role = db.scalar(
+        select(models.Role)
+        .where(models.Role.role_code == body.role_code)
+        .with_hint(models.Role, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if role is None:
+        raise HTTPException(status_code=409, detail="Vai trò chưa được khởi tạo trong database")
+
+    active = db.scalar(
+        select(models.UserRoleAssignment.assignment_id)
+        .where(
+            models.UserRoleAssignment.user_id == user_id,
+            models.UserRoleAssignment.role_code == body.role_code,
+            models.UserRoleAssignment.revoked_at.is_(None),
+        )
+        .with_hint(models.UserRoleAssignment, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if active is not None:
+        raise HTTPException(status_code=409, detail="Tài khoản đã có vai trò đang hoạt động")
+
+    now = models.utcnow()
+    assignment = models.UserRoleAssignment(
+        user_id=user_id,
+        role_code=body.role_code,
+        granted_at=now,
+        granted_by_user_id=current_admin.user_id,
+        grant_reason=body.reason,
+    )
+    db.add(assignment)
+    try:
+        db.flush()
+        db.add(
+            models.UserRoleAssignmentEvent(
+                assignment_id=assignment.assignment_id,
+                target_user_id=user_id,
+                role_code=body.role_code,
+                actor_user_id=current_admin.user_id,
+                actor_role_code="ADMIN",
+                event_code="GRANTED",
+                reason=body.reason,
+                occurred_at=now,
+            )
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Vai trò vừa được thay đổi bởi một yêu cầu khác")
+    db.refresh(assignment)
+    return {
+        "status": "success",
+        "data": _admin_role_assignment_data(assignment, target, current_admin, None),
+    }
+
+
+@app.post("/api/admin/role-assignments/{assignment_id}/revoke", response_model=schemas.AdminRoleAssignmentEnvelope)
+def revoke_admin_managed_role(
+    assignment_id: int,
+    body: schemas.AdminRoleRevokeRequest,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(require_admin),
+):
+    _lock_admin_actor_role(db, current_admin)
+    assignment_preview = db.get(models.UserRoleAssignment, assignment_id)
+    if assignment_preview is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi phân quyền")
+    role = db.scalar(
+        select(models.Role)
+        .where(models.Role.role_code == assignment_preview.role_code)
+        .with_hint(models.Role, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if role is None:
+        raise HTTPException(status_code=409, detail="Vai trò không còn tồn tại")
+    assignment = db.scalar(
+        select(models.UserRoleAssignment)
+        .where(models.UserRoleAssignment.assignment_id == assignment_id)
+        .with_hint(models.UserRoleAssignment, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi phân quyền")
+    if assignment.user_id == current_admin.user_id:
+        raise HTTPException(status_code=400, detail="ADMIN không thể tự thu hồi quyền của chính mình")
+    if assignment.revoked_at is not None:
+        raise HTTPException(status_code=409, detail="Vai trò này đã được thu hồi")
+
+    if assignment.role_code == "ADMIN":
+        active_admin_count = db.scalar(
+            select(func.count())
+            .select_from(models.UserRoleAssignment)
+            .where(
+                models.UserRoleAssignment.role_code == "ADMIN",
+                models.UserRoleAssignment.revoked_at.is_(None),
+            )
+        ) or 0
+        if active_admin_count <= 1:
+            raise HTTPException(status_code=409, detail="Không thể thu hồi ADMIN cuối cùng")
+
+    now = models.utcnow()
+    assignment.revoked_at = now
+    assignment.revoked_by_user_id = current_admin.user_id
+    assignment.revoke_reason = body.reason
+    db.add(
+        models.UserRoleAssignmentEvent(
+            assignment_id=assignment.assignment_id,
+            target_user_id=assignment.user_id,
+            role_code=assignment.role_code,
+            actor_user_id=current_admin.user_id,
+            actor_role_code="ADMIN",
+            event_code="REVOKED",
+            reason=body.reason,
+            occurred_at=now,
+        )
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Không thể thu hồi vai trò vì dữ liệu vừa thay đổi")
+    db.refresh(assignment)
+    target = db.get(models.User, assignment.user_id)
+    granted_by = db.get(models.User, assignment.granted_by_user_id) if assignment.granted_by_user_id else None
+    revoked_by = db.get(models.User, assignment.revoked_by_user_id) if assignment.revoked_by_user_id else None
+    return {
+        "status": "success",
+        "data": _admin_role_assignment_data(assignment, target, granted_by, revoked_by),
+    }
 
 
 @app.post("/api/users/me/change-password", response_model=schemas.MessageEnvelope)
