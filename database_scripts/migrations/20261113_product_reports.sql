@@ -1,8 +1,12 @@
 -- Chợ Trời UIT: product-report intake (DB-6B).
 -- Additive SQL Server migration. No existing application data is dropped or rewritten.
 -- Preserve report history: both foreign keys intentionally use NO ACTION (no cascade).
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
+GO
 
 IF OBJECT_ID(N'dbo.USERS', N'U') IS NULL
     THROW 51030, 'dbo.USERS does not exist; apply the base schema first.', 1;
