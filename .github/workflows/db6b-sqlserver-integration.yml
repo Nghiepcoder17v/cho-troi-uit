@@ -108,7 +108,8 @@ jobs:
           container_id="${{ job.services.sqlserver.id }}"
           for migration in \
             database_scripts/migrations/20261113_user_favorites.sql \
-            database_scripts/migrations/20261113_product_reports.sql; do
+            database_scripts/migrations/20261113_product_reports.sql \
+            database_scripts/migrations/20261113_db6c_moderation.sql; do
             docker cp "$migration" "$container_id:/tmp/$(basename "$migration")"
             for attempt in 1 2; do
               docker exec "$container_id" /opt/mssql-tools18/bin/sqlcmd \

@@ -100,19 +100,22 @@ jobs:
             -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b \
             -d ChoTroUIT_DB6A_Test -i /tmp/01_init_schema.sql
 
-      - name: Apply Favorites migration twice to verify idempotent deployment
+      - name: Apply DB6A, DB6B and DB6C migrations twice to verify idempotency
         env:
           MSSQL_SA_PASSWORD: ${{ format('UIT-CI-{0}-Aa9!', github.run_id) }}
         run: |
           set -euo pipefail
           container_id="${{ job.services.sqlserver.id }}"
-          docker cp database_scripts/migrations/20261113_user_favorites.sql \
-            "$container_id:/tmp/20261113_user_favorites.sql"
-
-          for attempt in 1 2; do
-            docker exec "$container_id" /opt/mssql-tools18/bin/sqlcmd \
-              -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b \
-              -d ChoTroUIT_DB6A_Test -i /tmp/20261113_user_favorites.sql
+          for migration in \
+            database_scripts/migrations/20261113_user_favorites.sql \
+            database_scripts/migrations/20261113_product_reports.sql \
+            database_scripts/migrations/20261113_db6c_moderation.sql; do
+            docker cp "$migration" "$container_id:/tmp/$(basename "$migration")"
+            for attempt in 1 2; do
+              docker exec "$container_id" /opt/mssql-tools18/bin/sqlcmd \
+                -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b \
+                -d ChoTroUIT_DB6A_Test -i "/tmp/$(basename "$migration")"
+            done
           done
 
       - name: Run SQL Server integration tests

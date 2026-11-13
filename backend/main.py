@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import case, delete, func, select, text, update
+from sqlalchemy import case, delete, func, select, text, true, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload
 
@@ -19,6 +19,7 @@ from security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     get_current_user,
+    require_moderator,
     hash_password,
     verify_password,
 )
@@ -155,12 +156,16 @@ def add_favorite(
     current_user: models.User = Depends(get_current_user),
 ):
     # SQL Server holds an update/serializable lock through the insert transaction,
-    # so a seller cannot hide the listing between this check and the saved relation.
+    # so seller visibility changes and moderation holds cannot race this saved relation.
     product = db.scalar(
         select(models.Product)
         .where(
             models.Product.product_id == product_id,
             models.Product.status != "Hidden",
+            ~select(models.ProductModeration.product_id).where(
+                models.ProductModeration.product_id == models.Product.product_id,
+                models.ProductModeration.is_held == true(),
+            ).exists(),
         )
         .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
     )
@@ -228,12 +233,13 @@ def list_my_favorites(
 
     data = []
     for favorite, product, seller in rows:
-        hidden = product.status == "Hidden"
+        moderation = db.get(models.ProductModeration, product.product_id)
+        hidden = product.status == "Hidden" or (moderation is not None and moderation.is_held)
         data.append(
             {
                 "product_id": favorite.product_id,
                 "created_at": favorite.created_at,
-                "status": product.status,
+                "status": "Hidden" if hidden else product.status,
                 # Hidden is a tombstone: no title, description, price, condition or seller data.
                 "product": None if hidden else {
                     "product_id": product.product_id,
@@ -295,6 +301,10 @@ def create_product_report(
         .where(
             models.Product.product_id == body.target_product_id,
             models.Product.status.in_(("Available", "Sold")),
+            ~select(models.ProductModeration.product_id).where(
+                models.ProductModeration.product_id == models.Product.product_id,
+                models.ProductModeration.is_held == true(),
+            ).exists(),
         )
         .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
     )
@@ -307,7 +317,7 @@ def create_product_report(
         select(models.ProductReport.report_id).where(
             models.ProductReport.reporter_user_id == reporter_id,
             models.ProductReport.target_product_id == body.target_product_id,
-            models.ProductReport.status == "Submitted",
+            models.ProductReport.status.in_(("Submitted", "InReview", "Escalated")),
         )
     )
     if existing_report_id is not None:
@@ -347,7 +357,7 @@ def create_product_report(
             select(models.ProductReport.report_id).where(
                 models.ProductReport.reporter_user_id == reporter_id,
                 models.ProductReport.target_product_id == body.target_product_id,
-                models.ProductReport.status == "Submitted",
+                models.ProductReport.status.in_(("Submitted", "InReview", "Escalated")),
             )
         )
         if duplicate is not None:
@@ -373,6 +383,362 @@ def create_product_report(
             "submitted_at": report.submitted_at,
         },
     }
+
+
+# ==========================================================================
+# MODERATOR WORKFLOW (DB-6C)
+# ==========================================================================
+_MODERATION_OPEN_STATES = ("Submitted", "InReview", "Escalated")
+
+
+def _moderation_report_data(db: Session, report: models.ProductReport) -> dict:
+    """Build a moderator-only DTO without reporter identity or account credentials."""
+    product = db.get(models.Product, report.target_product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Sản phẩm của báo cáo không còn tồn tại")
+    assigned_name = None
+    if report.assigned_moderator_user_id is not None:
+        assigned = db.get(models.User, report.assigned_moderator_user_id)
+        assigned_name = assigned.full_name if assigned is not None else None
+    return {
+        "report_id": report.report_id,
+        "target_product_id": report.target_product_id,
+        "reason_code": report.reason_code,
+        "description": report.description,
+        "status": report.status,
+        "submitted_at": report.submitted_at,
+        "updated_at": report.updated_at,
+        "assigned_moderator_user_id": report.assigned_moderator_user_id,
+        "assigned_moderator_name": assigned_name,
+        "review_started_at": report.review_started_at,
+        "resolved_at": report.resolved_at,
+        "resolution_code": report.resolution_code,
+        "product": {
+            "product_id": product.product_id,
+            "title": product.title,
+            "description": product.description,
+            "price": float(product.price),
+            "condition": product.condition,
+            "status": product.status,
+            "seller_id": product.seller_id,
+        },
+    }
+
+
+def _append_moderation_action(
+    db: Session,
+    *,
+    report_id: int,
+    actor_user_id: int,
+    actor_role_code: str,
+    action_code: str,
+    from_status: Optional[str],
+    to_status: str,
+    resolution_code: Optional[str] = None,
+    internal_note: Optional[str] = None,
+) -> None:
+    db.add(
+        models.ModerationAction(
+            report_id=report_id,
+            actor_user_id=actor_user_id,
+            actor_role_code=actor_role_code,
+            action_code=action_code,
+            from_status=from_status,
+            to_status=to_status,
+            resolution_code=resolution_code,
+            internal_note=internal_note,
+            occurred_at=models.utcnow(),
+        )
+    )
+
+
+def _lock_moderation_report(db: Session, report_id: int) -> models.ProductReport:
+    report = db.scalar(
+        select(models.ProductReport)
+        .where(models.ProductReport.report_id == report_id)
+        .with_hint(
+            models.ProductReport,
+            "WITH (UPDLOCK, HOLDLOCK)",
+            dialect_name="mssql",
+        )
+    )
+    if report is None:
+        raise HTTPException(status_code=404, detail="Báo cáo không tồn tại")
+    return report
+
+
+@app.get("/api/moderation/reports", response_model=schemas.ModerationQueueEnvelope)
+def list_moderation_reports(
+    status: Optional[schemas.ModerationReportStatus] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    moderator: tuple[models.User, str] = Depends(require_moderator),
+):
+    if status is not None and status not in _MODERATION_OPEN_STATES:
+        raise HTTPException(status_code=400, detail="Hàng đợi chỉ hiển thị báo cáo chưa giải quyết")
+    conditions = [models.ProductReport.status.in_(_MODERATION_OPEN_STATES)]
+    if status is not None:
+        conditions.append(models.ProductReport.status == status)
+    total = db.scalar(
+        select(func.count()).select_from(models.ProductReport).where(*conditions)
+    ) or 0
+    reports = db.scalars(
+        select(models.ProductReport)
+        .where(*conditions)
+        .order_by(models.ProductReport.submitted_at.asc(), models.ProductReport.report_id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return {
+        "status": "success",
+        "data": [_moderation_report_data(db, report) for report in reports],
+        "pagination": {
+            "current_page": page,
+            "page_size": page_size,
+            "total_items": total,
+            "total_pages": math.ceil(total / page_size),
+        },
+    }
+
+
+@app.get("/api/moderation/reports/{report_id}", response_model=schemas.ModerationReportEnvelope)
+def get_moderation_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    moderator: tuple[models.User, str] = Depends(require_moderator),
+):
+    report = db.get(models.ProductReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Báo cáo không tồn tại")
+    data = _moderation_report_data(db, report)
+    data["actions"] = db.scalars(
+        select(models.ModerationAction)
+        .where(models.ModerationAction.report_id == report_id)
+        .order_by(models.ModerationAction.occurred_at.asc(), models.ModerationAction.action_id.asc())
+    ).all()
+    return {"status": "success", "data": data}
+
+
+@app.post("/api/moderation/reports/{report_id}/claim", response_model=schemas.ModerationReportEnvelope)
+def claim_moderation_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    moderator: tuple[models.User, str] = Depends(require_moderator),
+):
+    current_user, role_code = moderator
+    report = _lock_moderation_report(db, report_id)
+    if report.status not in {"Submitted", "Escalated"} or report.assigned_moderator_user_id is not None:
+        raise HTTPException(status_code=409, detail="Báo cáo không còn ở trạng thái có thể nhận")
+    if report.status == "Escalated" and role_code != "ADMIN":
+        raise HTTPException(status_code=403, detail="Chỉ ADMIN có thể nhận báo cáo đã chuyển cấp")
+
+    previous_status = report.status
+    now = models.utcnow()
+    report.status = "InReview"
+    report.assigned_moderator_user_id = current_user.user_id
+    report.review_started_at = now
+    report.resolution_code = None
+    report.updated_at = now
+    _append_moderation_action(
+        db,
+        report_id=report_id,
+        actor_user_id=current_user.user_id,
+        actor_role_code=role_code,
+        action_code="CLAIMED",
+        from_status=previous_status,
+        to_status="InReview",
+    )
+    db.commit()
+    db.refresh(report)
+    data = _moderation_report_data(db, report)
+    data["actions"] = db.scalars(
+        select(models.ModerationAction)
+        .where(models.ModerationAction.report_id == report_id)
+        .order_by(models.ModerationAction.occurred_at.asc(), models.ModerationAction.action_id.asc())
+    ).all()
+    return {"status": "success", "data": data}
+
+
+@app.post("/api/moderation/reports/{report_id}/release", response_model=schemas.ModerationReportEnvelope)
+def release_moderation_report(
+    report_id: int,
+    body: schemas.ModerationReleaseRequest,
+    db: Session = Depends(get_db),
+    moderator: tuple[models.User, str] = Depends(require_moderator),
+):
+    current_user, role_code = moderator
+    report = _lock_moderation_report(db, report_id)
+    if report.status != "InReview":
+        raise HTTPException(status_code=409, detail="Chỉ có thể trả báo cáo đang được xem xét về hàng đợi")
+    if role_code != "ADMIN" and report.assigned_moderator_user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Chỉ người đang nhận báo cáo hoặc ADMIN có thể trả báo cáo")
+
+    report.status = "Submitted"
+    report.assigned_moderator_user_id = None
+    report.review_started_at = None
+    report.resolution_code = None
+    report.updated_at = models.utcnow()
+    _append_moderation_action(
+        db,
+        report_id=report_id,
+        actor_user_id=current_user.user_id,
+        actor_role_code=role_code,
+        action_code="RELEASED",
+        from_status="InReview",
+        to_status="Submitted",
+        resolution_code=body.reason_code,
+        internal_note=body.internal_note,
+    )
+    db.commit()
+    db.refresh(report)
+    data = _moderation_report_data(db, report)
+    data["actions"] = db.scalars(
+        select(models.ModerationAction)
+        .where(models.ModerationAction.report_id == report_id)
+        .order_by(models.ModerationAction.occurred_at.asc(), models.ModerationAction.action_id.asc())
+    ).all()
+    return {"status": "success", "data": data}
+
+
+@app.post("/api/moderation/reports/{report_id}/decision", response_model=schemas.ModerationReportEnvelope)
+def decide_moderation_report(
+    report_id: int,
+    body: schemas.ModerationDecisionRequest,
+    db: Session = Depends(get_db),
+    moderator: tuple[models.User, str] = Depends(require_moderator),
+):
+    current_user, role_code = moderator
+    report = _lock_moderation_report(db, report_id)
+    if report.status != "InReview" or report.assigned_moderator_user_id != current_user.user_id:
+        raise HTTPException(status_code=409, detail="Chỉ người đang nhận báo cáo mới có thể ra quyết định")
+    if body.decision == "Escalated" and role_code != "MODERATOR":
+        raise HTTPException(status_code=403, detail="ADMIN không thể chuyển tiếp báo cáo lên cùng cấp ADMIN")
+
+    now = models.utcnow()
+    previous_status = report.status
+    report.status = body.decision
+    report.resolution_code = body.resolution_code
+    report.updated_at = now
+    if body.decision == "Escalated":
+        report.assigned_moderator_user_id = None
+        report.review_started_at = None
+        report.resolved_at = None
+    else:
+        report.resolved_at = now
+
+    if body.decision == "Actioned":
+        product = db.scalar(
+            select(models.Product)
+            .where(models.Product.product_id == report.target_product_id)
+            .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+        )
+        if product is None:
+            raise HTTPException(status_code=404, detail="Sản phẩm của báo cáo không còn tồn tại")
+        hold = db.get(models.ProductModeration, product.product_id)
+        if hold is not None and hold.is_held:
+            raise HTTPException(status_code=409, detail="Sản phẩm đang có moderation hold")
+        if hold is None:
+            hold = models.ProductModeration(
+                product_id=product.product_id,
+                report_id=report_id,
+                is_held=True,
+                held_at=now,
+                held_by_user_id=current_user.user_id,
+            )
+            db.add(hold)
+        else:
+            hold.report_id = report_id
+            hold.is_held = True
+            hold.held_at = now
+            hold.held_by_user_id = current_user.user_id
+            hold.released_at = None
+            hold.released_by_user_id = None
+
+    action_code = {
+        "Dismissed": "DISMISSED",
+        "Actioned": "ACTIONED",
+        "Escalated": "ESCALATED",
+    }[body.decision]
+    _append_moderation_action(
+        db,
+        report_id=report_id,
+        actor_user_id=current_user.user_id,
+        actor_role_code=role_code,
+        action_code=action_code,
+        from_status=previous_status,
+        to_status=body.decision,
+        resolution_code=body.resolution_code,
+        internal_note=body.internal_note,
+    )
+    if body.decision == "Actioned":
+        _append_moderation_action(
+            db,
+            report_id=report_id,
+            actor_user_id=current_user.user_id,
+            actor_role_code=role_code,
+            action_code="HOLD_PLACED",
+            from_status="Actioned",
+            to_status="Actioned",
+            resolution_code="TEMPORARY_LISTING_HOLD",
+        )
+    db.commit()
+    db.refresh(report)
+    data = _moderation_report_data(db, report)
+    data["actions"] = db.scalars(
+        select(models.ModerationAction)
+        .where(models.ModerationAction.report_id == report_id)
+        .order_by(models.ModerationAction.occurred_at.asc(), models.ModerationAction.action_id.asc())
+    ).all()
+    return {"status": "success", "data": data}
+
+
+@app.post(
+    "/api/moderation/products/{product_id}/release-hold",
+    response_model=schemas.ModerationMessageEnvelope,
+)
+def release_product_moderation_hold(
+    product_id: int,
+    body: schemas.ModerationHoldReleaseRequest,
+    db: Session = Depends(get_db),
+    moderator: tuple[models.User, str] = Depends(require_moderator),
+):
+    current_user, role_code = moderator
+    product = db.scalar(
+        select(models.Product)
+        .where(models.Product.product_id == product_id)
+        .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if product is None:
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+    hold = db.scalar(
+        select(models.ProductModeration)
+        .where(models.ProductModeration.product_id == product_id)
+        .with_hint(models.ProductModeration, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if hold is None or not hold.is_held:
+        raise HTTPException(status_code=409, detail="Sản phẩm không có hold đang hoạt động")
+    report = db.get(models.ProductReport, hold.report_id)
+    if report is None:
+        raise HTTPException(status_code=409, detail="Không tìm thấy báo cáo gốc của hold")
+
+    now = models.utcnow()
+    hold.is_held = False
+    hold.released_at = now
+    hold.released_by_user_id = current_user.user_id
+    _append_moderation_action(
+        db,
+        report_id=report.report_id,
+        actor_user_id=current_user.user_id,
+        actor_role_code=role_code,
+        action_code="HOLD_RELEASED",
+        from_status="Actioned",
+        to_status="Actioned",
+        resolution_code="TEMPORARY_LISTING_HOLD",
+        internal_note=body.internal_note,
+    )
+    db.commit()
+    return {"status": "success", "message": "Đã gỡ moderation hold; trạng thái giao dịch không thay đổi."}
 
 
 @app.post("/api/users/me/change-password", response_model=schemas.MessageEnvelope)
@@ -421,7 +787,13 @@ def list_products(
     if min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(status_code=422, detail="Giá tối thiểu không được lớn hơn giá tối đa")
 
-    conditions = [models.Product.status == status]
+    conditions = [
+        models.Product.status == status,
+        ~select(models.ProductModeration.product_id).where(
+            models.ProductModeration.product_id == models.Product.product_id,
+            models.ProductModeration.is_held == true(),
+        ).exists(),
+    ]
     if category_id is not None:
         conditions.append(models.Product.category_id == category_id)
     if q and q.strip():
@@ -509,7 +881,7 @@ def list_my_products(
     total = db.scalar(select(func.count()).select_from(models.Product).where(*conditions)) or 0
     rows = db.scalars(
         select(models.Product)
-        .options(joinedload(models.Product.seller))
+        .options(joinedload(models.Product.seller), joinedload(models.Product.moderation))
         .where(*conditions)
         .order_by(models.Product.created_at.desc(), models.Product.product_id.desc())
         .offset((page - 1) * page_size)
@@ -532,7 +904,13 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     product = db.scalar(
         select(models.Product)
         .options(joinedload(models.Product.seller))
-        .where(models.Product.product_id == product_id)
+        .where(
+            models.Product.product_id == product_id,
+            ~select(models.ProductModeration.product_id).where(
+                models.ProductModeration.product_id == models.Product.product_id,
+                models.ProductModeration.is_held == true(),
+            ).exists(),
+        )
     )
     if product is None or product.status == "Hidden":
         raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
@@ -689,6 +1067,10 @@ def list_public_user_products(
     conditions = [
         models.Product.seller_id == user_id,
         models.Product.status.in_(("Available", "Sold")),
+        ~select(models.ProductModeration.product_id).where(
+            models.ProductModeration.product_id == models.Product.product_id,
+            models.ProductModeration.is_held == true(),
+        ).exists(),
     ]
     if status is not None:
         conditions.append(models.Product.status == status)
@@ -698,7 +1080,7 @@ def list_public_user_products(
     ) or 0
     rows = db.scalars(
         select(models.Product)
-        .options(joinedload(models.Product.seller))
+        .options(joinedload(models.Product.seller), joinedload(models.Product.moderation))
         .where(*conditions)
         .order_by(models.Product.created_at.desc(), models.Product.product_id.desc())
         .offset((page - 1) * page_size)
@@ -725,14 +1107,17 @@ def update_product(
 ):
     product = db.scalar(
         select(models.Product)
-        .options(joinedload(models.Product.seller))
+        .options(joinedload(models.Product.seller), joinedload(models.Product.moderation))
         .where(
             models.Product.product_id == product_id,
             models.Product.seller_id == current_user.user_id,
         )
+        .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
     )
     if product is None:
         raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+    if product.moderation is not None and product.moderation.is_held:
+        raise HTTPException(status_code=409, detail="Sản phẩm đang bị tạm ẩn để kiểm duyệt; bạn chưa thể chỉnh sửa")
     if product.status in {"Reserved", "Sold"}:
         raise HTTPException(status_code=409, detail="Không thể chỉnh sửa sản phẩm đang được giữ chỗ hoặc đã bán")
     if body.category_id is not None and db.get(models.Category, body.category_id) is None:
@@ -755,8 +1140,15 @@ def create_transaction(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    product = db.get(models.Product, body.product_id)
+    product = db.scalar(
+        select(models.Product)
+        .where(models.Product.product_id == body.product_id)
+        .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
     if product is None or product.status == "Hidden":
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+    moderation = db.get(models.ProductModeration, body.product_id)
+    if moderation is not None and moderation.is_held:
         raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
     if product.seller_id == current_user.user_id:
         raise HTTPException(status_code=400, detail="Bạn không thể mua sản phẩm của chính mình")

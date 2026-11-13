@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -78,6 +79,14 @@ class Product(Base):
 
     seller = relationship("User")
     category = relationship("Category")
+    moderation = relationship("ProductModeration", back_populates="product", uselist=False)
+
+    @property
+    def moderation_status(self) -> str | None:
+        """Safe seller-facing state; never includes reporter or moderator details."""
+        if self.moderation is not None and self.moderation.is_held:
+            return "Held"
+        return None
 
 
 class UserFavorite(Base):
@@ -108,7 +117,10 @@ class ProductReport(Base):
             "'SUSPECTED_SCAM', 'SPAM_OR_DUPLICATE', 'OTHER')",
             name="CHK_ProductReports_ReasonCode",
         ),
-        CheckConstraint("status IN ('Submitted')", name="CHK_ProductReports_Status"),
+        CheckConstraint(
+            "status IN ('Submitted', 'InReview', 'Escalated', 'Dismissed', 'Actioned')",
+            name="CHK_ProductReports_Status",
+        ),
         Index(
             "IX_ProductReports_ReporterSubmitted",
             "reporter_user_id",
@@ -126,8 +138,8 @@ class ProductReport(Base):
             "reporter_user_id",
             "target_product_id",
             unique=True,
-            mssql_where=text("status = 'Submitted'"),
-            sqlite_where=text("status = 'Submitted'"),
+            mssql_where=text("status <> 'Dismissed' AND status <> 'Actioned'"),
+            sqlite_where=text("status <> 'Dismissed' AND status <> 'Actioned'"),
         ),
     )
 
@@ -150,8 +162,117 @@ class ProductReport(Base):
     reason_code = Column(String(32), nullable=False)
     description = Column(Unicode(500), nullable=True)
     status = Column(String(16), nullable=False, default="Submitted")
+    assigned_moderator_user_id = Column(
+        Integer,
+        ForeignKey("users.user_id", name="FK_ProductReports_AssignedModerator"),
+        nullable=True,
+    )
+    review_started_at = Column(DateTime, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    resolution_code = Column(String(32), nullable=True)
     submitted_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    role_code = Column(String(32), primary_key=True)
+    description = Column(Unicode(100), nullable=False)
+
+
+class UserRoleAssignment(Base):
+    __tablename__ = "user_role_assignments"
+    __table_args__ = (
+        Index(
+            "UX_UserRoleAssignments_UserRoleActive",
+            "user_id",
+            "role_code",
+            unique=True,
+            mssql_where=text("revoked_at IS NULL"),
+            sqlite_where=text("revoked_at IS NULL"),
+        ),
+        Index("IX_UserRoleAssignments_UserActive", "user_id", "revoked_at"),
+    )
+
+    assignment_id = Column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    role_code = Column(String(32), ForeignKey("roles.role_code"), nullable=False)
+    granted_at = Column(DateTime, nullable=False, default=utcnow)
+    granted_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    grant_reason = Column(Unicode(250), nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    revoked_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    revoke_reason = Column(Unicode(250), nullable=True)
+
+
+class ProductModeration(Base):
+    """One current moderation-hold row per product; history lives in ModerationAction."""
+
+    __tablename__ = "product_moderation"
+    __table_args__ = (
+        CheckConstraint(
+            "(is_held = 1 AND released_at IS NULL AND released_by_user_id IS NULL) OR "
+            "(is_held = 0 AND released_at IS NOT NULL AND released_by_user_id IS NOT NULL)",
+            name="CHK_ProductModeration_ReleaseState",
+        ),
+    )
+
+    product_id = Column(Integer, ForeignKey("products.product_id"), primary_key=True)
+    report_id = Column(BigInteger, ForeignKey("product_reports.report_id"), nullable=False)
+    is_held = Column(Boolean, nullable=False, default=True)
+    held_at = Column(DateTime, nullable=False, default=utcnow)
+    held_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    released_at = Column(DateTime, nullable=True)
+    released_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+
+    product = relationship("Product", back_populates="moderation")
+
+
+class ModerationAction(Base):
+    """Moderation audit event; written in the same transaction as each state change."""
+
+    __tablename__ = "moderation_actions"
+    __table_args__ = (
+        CheckConstraint(
+            "action_code IN ('CLAIMED', 'RELEASED', 'DISMISSED', 'ACTIONED', "
+            "'ESCALATED', 'HOLD_PLACED', 'HOLD_RELEASED')",
+            name="CHK_ModerationActions_ActionCode",
+        ),
+        CheckConstraint(
+            "from_status IS NULL OR from_status IN "
+            "('Submitted', 'InReview', 'Escalated', 'Dismissed', 'Actioned')",
+            name="CHK_ModerationActions_FromStatus",
+        ),
+        CheckConstraint(
+            "to_status IN ('Submitted', 'InReview', 'Escalated', 'Dismissed', 'Actioned')",
+            name="CHK_ModerationActions_ToStatus",
+        ),
+        CheckConstraint(
+            "internal_note IS NULL OR length(internal_note) <= 1000",
+            name="CHK_ModerationActions_NoteLength",
+        ),
+        Index("IX_ModerationActions_ReportOccurred", "report_id", "occurred_at", "action_id"),
+    )
+
+    action_id = Column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    report_id = Column(BigInteger, ForeignKey("product_reports.report_id"), nullable=False)
+    actor_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    actor_role_code = Column(String(32), ForeignKey("roles.role_code"), nullable=False)
+    action_code = Column(String(32), nullable=False)
+    from_status = Column(String(16), nullable=True)
+    to_status = Column(String(16), nullable=False)
+    resolution_code = Column(String(32), nullable=True)
+    internal_note = Column(Unicode(1000), nullable=True)
+    occurred_at = Column(DateTime, nullable=False, default=utcnow)
 
 
 class Transaction(Base):
