@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import type { User } from "../types";
 
-export type AppView = "market" | "explore" | "sell" | "account" | "public-profile";
+export type AppView = "market" | "explore" | "sell" | "account" | "admin" | "public-profile";
 
 type AppShellProps = {
   user: User | null;
+  isAdmin: boolean;
   view: AppView;
   mobileNavOpen: boolean;
   cartCount: number;
@@ -21,7 +22,7 @@ type AppShellProps = {
 };
 
 export function AppShell({
-  user, view, mobileNavOpen, cartCount, notice, error, children,
+  user, isAdmin, view, mobileNavOpen, cartCount, notice, error, children,
   onNavigate, onOpenLogin, onOpenCart, onToggleMenu, onCloseMenu, onClearNotice, onClearError,
 }: AppShellProps) {
   const navigate = (nextView: AppView) => {
@@ -39,6 +40,7 @@ export function AppShell({
         <button type="button" className={view === "explore" ? "active" : ""} aria-current={view === "explore" ? "page" : undefined} onClick={() => navigate("explore")}>Khám phá</button>
         <button type="button" className={view === "sell" ? "active" : ""} aria-current={view === "sell" ? "page" : undefined} onClick={() => navigate("sell")}>Đăng bán</button>
         {user && <button type="button" className={view === "account" ? "active" : ""} aria-current={view === "account" ? "page" : undefined} onClick={() => navigate("account")}>Tài khoản</button>}
+        {user && isAdmin && <button type="button" className={view === "admin" ? "active" : ""} aria-current={view === "admin" ? "page" : undefined} onClick={() => navigate("admin")}>Quản trị</button>}
       </nav>
       <div className="header-actions">
         {user ? <button className="user-chip" onClick={() => navigate("account")} type="button"><span>{user.full_name.slice(0, 1)}</span><span className="user-chip-name">{user.full_name}</span></button> : <button className="outline-button" onClick={onOpenLogin} type="button">Đăng nhập</button>}
