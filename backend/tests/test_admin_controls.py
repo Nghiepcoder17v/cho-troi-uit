@@ -132,8 +132,12 @@ def test_admin_can_grant_revoke_and_review_role_history(
         params={"user_id": target_id, "include_revoked": "true"},
     )
     assert assignments.status_code == 200
-    assert len(assignments.json()["data"]) == 1
-    assert assignments.json()["data"][0]["revoke_reason"] == "Moderator duty has ended"
+    assignment_history = assignments.json()["data"]
+    assert len(assignment_history) == 2
+    moderator_history = next(item for item in assignment_history if item["role_code"] == "MODERATOR")
+    admin_history = next(item for item in assignment_history if item["role_code"] == "ADMIN")
+    assert moderator_history["revoke_reason"] == "Moderator duty has ended"
+    assert admin_history["revoke_reason"] == "Administrator assignment ended"
 
     events = client.get(
         "/api/admin/role-events",
@@ -208,7 +212,9 @@ def test_role_grant_and_audit_event_commit_atomically_on_sqlite(
                 headers=admin_headers,
                 json={"role_code": "MODERATOR", "reason": "Approved moderation duty"},
             )
-        assert response.status_code == 500
+        # SQLite's RAISE(ABORT) is surfaced as IntegrityError and mapped to 409.
+        # The SQL Server integration test separately verifies the server-side THROW rollback.
+        assert response.status_code == 409
         with session_factory() as session:
             assignment_count = session.query(models.UserRoleAssignment).filter_by(
                 user_id=target_id, role_code="MODERATOR"
