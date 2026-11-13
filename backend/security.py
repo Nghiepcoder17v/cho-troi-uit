@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import models
@@ -72,3 +73,23 @@ def get_current_user(
     if user is None:
         raise _unauthorized("Tài khoản không tồn tại")
     return user
+
+
+def require_moderator(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> tuple[models.User, str]:
+    """Resolve active authority from SQL on every request; never trust JWT role claims."""
+    role_codes = set(
+        db.scalars(
+            select(models.UserRoleAssignment.role_code).where(
+                models.UserRoleAssignment.user_id == current_user.user_id,
+                models.UserRoleAssignment.revoked_at.is_(None),
+            )
+        ).all()
+    )
+    if "ADMIN" in role_codes:
+        return current_user, "ADMIN"
+    if "MODERATOR" in role_codes:
+        return current_user, "MODERATOR"
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền kiểm duyệt")
