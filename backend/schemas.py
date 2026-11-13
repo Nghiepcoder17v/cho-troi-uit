@@ -287,6 +287,8 @@ class ProductOut(BaseModel):
     status: str
     created_at: datetime
     seller: SellerOut
+    # Present only in the authenticated seller's own product history.
+    moderation_status: Optional[Literal["Held"]] = None
 
 
 class Pagination(BaseModel):
@@ -354,6 +356,132 @@ class ProductReportEnvelope(BaseModel):
     status: str = "success"
     message: str
     data: ProductReportOut
+
+
+# ---------------------------------------------------------------- MODERATION (DB-6C)
+ModerationReportStatus = Literal["Submitted", "InReview", "Escalated", "Dismissed", "Actioned"]
+ModerationDecision = Literal["Dismissed", "Actioned", "Escalated"]
+ModerationResolutionCode = Literal[
+    "NOT_A_VIOLATION",
+    "INSUFFICIENT_EVIDENCE",
+    "OUT_OF_SCOPE",
+    "TEMPORARY_LISTING_HOLD",
+    "NEEDS_ADMIN_REVIEW",
+]
+
+
+class ModerationDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: ModerationDecision
+    resolution_code: ModerationResolutionCode
+    internal_note: str = Field(..., min_length=1, max_length=1000)
+
+    @field_validator("internal_note")
+    @classmethod
+    def _normalize_internal_note(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Ghi chú nội bộ không được để trống")
+        return value
+
+    @model_validator(mode="after")
+    def _decision_code_matches(self):
+        allowed = {
+            "Dismissed": {"NOT_A_VIOLATION", "INSUFFICIENT_EVIDENCE", "OUT_OF_SCOPE"},
+            "Actioned": {"TEMPORARY_LISTING_HOLD"},
+            "Escalated": {"NEEDS_ADMIN_REVIEW"},
+        }
+        if self.resolution_code not in allowed[self.decision]:
+            raise ValueError("Mã kết quả không phù hợp với quyết định")
+        return self
+
+
+class ModerationReleaseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason_code: Literal["NEEDS_REQUEUE", "ADMIN_REASSIGNMENT", "CLAIMED_IN_ERROR"]
+    internal_note: str = Field(..., min_length=1, max_length=1000)
+
+    @field_validator("internal_note")
+    @classmethod
+    def _normalize_internal_note(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Ghi chú nội bộ không được để trống")
+        return value
+
+
+class ModerationHoldReleaseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    internal_note: str = Field(..., min_length=1, max_length=1000)
+
+    @field_validator("internal_note")
+    @classmethod
+    def _normalize_internal_note(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Ghi chú nội bộ không được để trống")
+        return value
+
+
+class ModerationProductOut(BaseModel):
+    product_id: int
+    title: str
+    description: Optional[str] = None
+    price: float
+    condition: str
+    status: str
+    seller_id: int
+
+
+class ModerationReportOut(BaseModel):
+    report_id: int
+    target_product_id: int
+    reason_code: ProductReportReasonCode
+    description: Optional[str] = None
+    status: ModerationReportStatus
+    submitted_at: datetime
+    updated_at: datetime
+    assigned_moderator_user_id: Optional[int] = None
+    assigned_moderator_name: Optional[str] = None
+    review_started_at: Optional[datetime] = None
+    resolved_at: Optional[datetime] = None
+    resolution_code: Optional[str] = None
+    product: ModerationProductOut
+
+
+class ModerationActionOut(BaseModel):
+    action_id: int
+    actor_user_id: int
+    actor_role_code: str
+    action_code: str
+    from_status: Optional[str] = None
+    to_status: str
+    resolution_code: Optional[str] = None
+    internal_note: Optional[str] = None
+    occurred_at: datetime
+
+
+class ModerationReportDetailOut(ModerationReportOut):
+    actions: list[ModerationActionOut]
+
+
+class ModerationQueueEnvelope(BaseModel):
+    status: str = "success"
+    data: list[ModerationReportOut]
+    pagination: Pagination
+
+
+class ModerationReportEnvelope(BaseModel):
+    status: str = "success"
+    data: ModerationReportDetailOut
+
+
+class ModerationMessageEnvelope(BaseModel):
+    status: str = "success"
+    message: str
 
 
 # ---------------------------------------------------------------- TRANSACTION
