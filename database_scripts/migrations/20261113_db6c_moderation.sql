@@ -93,7 +93,7 @@ IF EXISTS (
     DROP INDEX UX_ProductReports_ReporterTargetOpen ON dbo.PRODUCT_REPORTS;
 CREATE UNIQUE INDEX UX_ProductReports_ReporterTargetOpen
     ON dbo.PRODUCT_REPORTS (reporter_user_id ASC, target_product_id ASC)
-    WHERE status IN ('Submitted', 'InReview', 'Escalated');
+    WHERE status <> 'Dismissed' AND status <> 'Actioned';
 IF NOT EXISTS (
     SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.PRODUCT_REPORTS')
       AND name = N'IX_ProductReports_Queue'
