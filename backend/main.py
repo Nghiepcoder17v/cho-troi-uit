@@ -19,6 +19,7 @@ from security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     get_current_user,
+    require_moderator,
     hash_password,
     verify_password,
 )
@@ -161,6 +162,10 @@ def add_favorite(
         .where(
             models.Product.product_id == product_id,
             models.Product.status != "Hidden",
+            ~select(models.ProductModeration.product_id).where(
+                models.ProductModeration.product_id == models.Product.product_id,
+                models.ProductModeration.is_held.is_(True),
+            ).exists(),
         )
         .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
     )
@@ -228,12 +233,13 @@ def list_my_favorites(
 
     data = []
     for favorite, product, seller in rows:
-        hidden = product.status == "Hidden"
+        moderation = db.get(models.ProductModeration, product.product_id)
+        hidden = product.status == "Hidden" or (moderation is not None and moderation.is_held)
         data.append(
             {
                 "product_id": favorite.product_id,
                 "created_at": favorite.created_at,
-                "status": product.status,
+                "status": "Hidden" if hidden else product.status,
                 # Hidden is a tombstone: no title, description, price, condition or seller data.
                 "product": None if hidden else {
                     "product_id": product.product_id,
@@ -295,6 +301,10 @@ def create_product_report(
         .where(
             models.Product.product_id == body.target_product_id,
             models.Product.status.in_(("Available", "Sold")),
+            ~select(models.ProductModeration.product_id).where(
+                models.ProductModeration.product_id == models.Product.product_id,
+                models.ProductModeration.is_held.is_(True),
+            ).exists(),
         )
         .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
     )
@@ -307,7 +317,7 @@ def create_product_report(
         select(models.ProductReport.report_id).where(
             models.ProductReport.reporter_user_id == reporter_id,
             models.ProductReport.target_product_id == body.target_product_id,
-            models.ProductReport.status == "Submitted",
+            models.ProductReport.status.in_(("Submitted", "InReview", "Escalated")),
         )
     )
     if existing_report_id is not None:
@@ -347,7 +357,7 @@ def create_product_report(
             select(models.ProductReport.report_id).where(
                 models.ProductReport.reporter_user_id == reporter_id,
                 models.ProductReport.target_product_id == body.target_product_id,
-                models.ProductReport.status == "Submitted",
+                models.ProductReport.status.in_(("Submitted", "InReview", "Escalated")),
             )
         )
         if duplicate is not None:
@@ -421,7 +431,13 @@ def list_products(
     if min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(status_code=422, detail="Giá tối thiểu không được lớn hơn giá tối đa")
 
-    conditions = [models.Product.status == status]
+    conditions = [
+        models.Product.status == status,
+        ~select(models.ProductModeration.product_id).where(
+            models.ProductModeration.product_id == models.Product.product_id,
+            models.ProductModeration.is_held.is_(True),
+        ).exists(),
+    ]
     if category_id is not None:
         conditions.append(models.Product.category_id == category_id)
     if q and q.strip():
@@ -509,7 +525,7 @@ def list_my_products(
     total = db.scalar(select(func.count()).select_from(models.Product).where(*conditions)) or 0
     rows = db.scalars(
         select(models.Product)
-        .options(joinedload(models.Product.seller))
+        .options(joinedload(models.Product.seller), joinedload(models.Product.moderation))
         .where(*conditions)
         .order_by(models.Product.created_at.desc(), models.Product.product_id.desc())
         .offset((page - 1) * page_size)
@@ -532,7 +548,13 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     product = db.scalar(
         select(models.Product)
         .options(joinedload(models.Product.seller))
-        .where(models.Product.product_id == product_id)
+        .where(
+            models.Product.product_id == product_id,
+            ~select(models.ProductModeration.product_id).where(
+                models.ProductModeration.product_id == models.Product.product_id,
+                models.ProductModeration.is_held.is_(True),
+            ).exists(),
+        )
     )
     if product is None or product.status == "Hidden":
         raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
@@ -689,6 +711,10 @@ def list_public_user_products(
     conditions = [
         models.Product.seller_id == user_id,
         models.Product.status.in_(("Available", "Sold")),
+        ~select(models.ProductModeration.product_id).where(
+            models.ProductModeration.product_id == models.Product.product_id,
+            models.ProductModeration.is_held.is_(True),
+        ).exists(),
     ]
     if status is not None:
         conditions.append(models.Product.status == status)
@@ -698,7 +724,7 @@ def list_public_user_products(
     ) or 0
     rows = db.scalars(
         select(models.Product)
-        .options(joinedload(models.Product.seller))
+        .options(joinedload(models.Product.seller), joinedload(models.Product.moderation))
         .where(*conditions)
         .order_by(models.Product.created_at.desc(), models.Product.product_id.desc())
         .offset((page - 1) * page_size)
@@ -733,6 +759,8 @@ def update_product(
     )
     if product is None:
         raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+    if product.moderation is not None and product.moderation.is_held:
+        raise HTTPException(status_code=409, detail="Sản phẩm đang bị tạm ẩn để kiểm duyệt; bạn chưa thể chỉnh sửa")
     if product.status in {"Reserved", "Sold"}:
         raise HTTPException(status_code=409, detail="Không thể chỉnh sửa sản phẩm đang được giữ chỗ hoặc đã bán")
     if body.category_id is not None and db.get(models.Category, body.category_id) is None:
@@ -755,8 +783,15 @@ def create_transaction(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    product = db.get(models.Product, body.product_id)
+    product = db.scalar(
+        select(models.Product)
+        .where(models.Product.product_id == body.product_id)
+        .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
     if product is None or product.status == "Hidden":
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+    moderation = db.get(models.ProductModeration, body.product_id)
+    if moderation is not None and moderation.is_held:
         raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
     if product.seller_id == current_user.user_id:
         raise HTTPException(status_code=400, detail="Bạn không thể mua sản phẩm của chính mình")
