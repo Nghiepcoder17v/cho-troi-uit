@@ -37,8 +37,8 @@ def db6c_engine():
 
 
 def _insert_user(connection: sa.Connection, label: str) -> int:
-    suffix = uuid.uuid4().hex[:7]
-    student_id = f"8{suffix}"
+    suffix = int(uuid.uuid4().hex[:7], 16) % 10_000_000
+    student_id = f"8{suffix:07d}"
     return connection.execute(
         sa.text(
             """
