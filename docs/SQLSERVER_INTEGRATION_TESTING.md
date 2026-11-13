@@ -87,7 +87,61 @@ Khi chưa bật `RUN_SQLSERVER_INTEGRATION=1`, các test SQL Server sẽ đượ
 | Trigger behavior | UPDATE một user không truyền updated_at thì trigger tự cập nhật timestamp |
 | Unique-index behavior | Có thể tạo giao dịch mới sau một giao dịch Cancelled; không thể tạo hai giao dịch chưa Cancelled cho cùng sản phẩm |
 
-## 5. Phần cần xác nhận thủ công sau khi test tự động
+## 5. DB-6A — Favorites migration và HTTP API trên SQL Server
+
+DB-6A thêm dbo.USER_FAVORITES bằng migration cộng thêm
+database_scripts/migrations/20261113_user_favorites.sql. Bài test này cần
+một database mới có hậu tố _test; không chạy migration hoặc test ghi dữ liệu
+trên ChoTroUIT, UIT_Exchange, DWH hay database đang dùng.
+
+### 5.1 Dựng database thử nghiệm
+
+Trong SSMS, tạo một database mới, ví dụ:
+
+```sql
+CREATE DATABASE ChoTroUIT_DB6A_Test;
+GO
+```
+
+Chọn đúng database ChoTroUIT_DB6A_Test, sau đó chạy lần lượt:
+
+1. database_scripts/01_init_schema.sql — chỉ trên database test mới vừa tạo.
+2. database_scripts/migrations/20261113_user_favorites.sql.
+
+**Không chạy lại 01_init_schema.sql trên database đã có dữ liệu.** File này
+xóa và tạo lại schema. Với database kiểm thử đã tồn tại, chỉ chạy migration
+Favorites nếu baseline schema đã được xác nhận tương thích.
+
+### 5.2 Cấu hình và chạy SQL Server integration tests
+
+Từ thư mục backend trong PowerShell:
+
+```powershell
+$env:SQLSERVER_TEST_DATABASE_URL = "mssql+pyodbc://@localhost/ChoTroUIT_DB6A_Test?driver=ODBC+Driver+18+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes"
+$env:RUN_SQLSERVER_INTEGRATION = "1"
+
+python -m pytest -v -m sqlserver_integration
+```
+
+Với SQL Login, dùng user/password phù hợp và URL-encode ký tự đặc biệt.
+Không commit connection string hoặc thông tin đăng nhập vào repository.
+
+### 5.3 Phạm vi DB-6A được kiểm tra
+
+| Test | Điều cần xác nhận |
+|---|---|
+| Favorites schema | Đúng ba cột, kiểu dữ liệu, nullability và composite PK (user_id, product_id) |
+| Foreign keys | FK đến USERS/PRODUCTS, không cascade delete |
+| Pagination index | user_id ASC, created_at DESC, product_id DESC |
+| UTC default | created_at dùng SYSUTCDATETIME() |
+| Constraint behavior | Chặn favorite trùng và product FK không hợp lệ |
+| HTTP API trên SQL Server | FastAPI GET/PUT/DELETE chạy bằng Session gắn với SQL Server connection; xác minh query hint SQL Server, auth, idempotency, ownership, dữ liệu được che, tombstone Hidden và không tạo TRANSACTIONS |
+
+Bài HTTP API dùng savepoint trong transaction ngoài của fixture; fixture rollback
+toàn bộ DML khi test kết thúc. Nó không cần và không được dùng database ứng dụng
+làm database test.
+
+## 6. Phần cần xác nhận thủ công sau khi test tự động
 
 - Database theo cấu hình `DATABASE_URL` là `UIT_Exchange`. Metadata ban đầu cho thấy thiếu hai cột xác nhận và bảng `REVIEWS`; đã tạo backup `COPY_ONLY`, xác minh bằng `RESTORE VERIFYONLY`, rồi chạy migration Step 4 trước Step 5.
 - Sau migration, đã xác nhận `buyer_confirmed_at`, `seller_confirmed_at`, bảng `REVIEWS`, các constraint/index của review và filtered unique index. Ba trigger `updated_at` vẫn bật.

@@ -27,6 +27,7 @@
 ## Verification
 
 - Backend unit/API tests cover authentication, idempotency, lifecycle states, Hidden tombstone redaction, ownership, privacy and stable pagination.
-- An opt-in SQL Server integration test verifies exact columns/types, composite PK order, both FK targets/no-cascade behavior, descending index order, UTC default, duplicate rejection and FK enforcement.
+- Opt-in SQL Server integration tests verify exact columns/types, composite PK order, both FK targets/no-cascade behavior, descending index order, UTC default, duplicate rejection and FK enforcement.
+- A SQL Server HTTP integration test exercises FastAPI GET/PUT/DELETE endpoints against the SQL Server dialect in a rollback-protected test transaction; it verifies the SQL Server query hint path, authentication, ownership, idempotency, redaction, Hidden tombstones and that no transaction is created.
 - Run SQL Server integration tests only after applying the migration to a dedicated database whose name ends in `_test`.
 - SQLite tests do not substitute for SQL Server migration/integration verification.

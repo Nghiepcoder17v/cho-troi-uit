@@ -462,3 +462,188 @@ def test_sqlserver_user_favorites_schema_composite_key_and_foreign_keys(
                 ),
                 {"user_id": user_id, "product_id": -999999},
             )
+
+def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
+    sqlserver_connection: sa.Connection,
+):
+    """Exercise Favorites HTTP routes against SQL Server, not SQLite.
+
+    Each request gets a Session bound to the fixture's externally managed
+    connection. create_savepoint keeps request-level commits inside the
+    fixture's outer transaction, which is rolled back after the test.
+    """
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import Session
+
+    from database import get_db
+    from main import app
+    from security import create_access_token
+
+    connection = sqlserver_connection
+    seller_id = _insert_user(connection)
+    buyer_id = _insert_user(connection)
+    outsider_id = _insert_user(connection)
+    category_id = connection.execute(
+        sa.text(
+            """
+            INSERT INTO dbo.CATEGORIES (category_name)
+            OUTPUT INSERTED.category_id
+            VALUES (:category_name)
+            """
+        ),
+        {"category_name": f"FavoritesAPI-{uuid.uuid4().hex[:10]}"},
+    ).scalar_one()
+    product_id = connection.execute(
+        sa.text(
+            """
+            INSERT INTO dbo.PRODUCTS
+                (seller_id, category_id, title, description, price, condition, status)
+            OUTPUT INSERTED.product_id
+            VALUES
+                (:seller_id, :category_id, :title, :description, 42000, 'Good', 'Available')
+            """
+        ),
+        {
+            "seller_id": seller_id,
+            "category_id": category_id,
+            "title": f"Favorites SQL API {uuid.uuid4().hex[:8]}",
+            "description": "Private description must not be returned by Favorites.",
+        },
+    ).scalar_one()
+
+    def override_get_db():
+        with Session(
+            bind=connection,
+            autoflush=False,
+            autocommit=False,
+            join_transaction_mode="create_savepoint",
+        ) as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    origin = "http://localhost:5173"
+    buyer_headers = {
+        "Cookie": f"access_token={create_access_token(buyer_id)}",
+        "Origin": origin,
+    }
+    seller_headers = {
+        "Cookie": f"access_token={create_access_token(seller_id)}",
+        "Origin": origin,
+    }
+    outsider_headers = {
+        "Cookie": f"access_token={create_access_token(outsider_id)}",
+        "Origin": origin,
+    }
+
+    try:
+        with TestClient(app, base_url="https://testserver", headers={"Origin": origin}) as client:
+            assert client.get("/api/users/me/favorites").status_code == 401
+
+            first_add = client.put(
+                f"/api/users/me/favorites/{product_id}",
+                headers=buyer_headers,
+            )
+            assert first_add.status_code == 200, first_add.text
+
+            first_created_at = connection.execute(
+                sa.text(
+                    """
+                    SELECT created_at
+                    FROM dbo.USER_FAVORITES
+                    WHERE user_id = :user_id AND product_id = :product_id
+                    """
+                ),
+                {"user_id": buyer_id, "product_id": product_id},
+            ).scalar_one()
+
+            duplicate_add = client.put(
+                f"/api/users/me/favorites/{product_id}",
+                headers=buyer_headers,
+            )
+            assert duplicate_add.status_code == 200, duplicate_add.text
+
+            second_created_at = connection.execute(
+                sa.text(
+                    """
+                    SELECT created_at
+                    FROM dbo.USER_FAVORITES
+                    WHERE user_id = :user_id AND product_id = :product_id
+                    """
+                ),
+                {"user_id": buyer_id, "product_id": product_id},
+            ).scalar_one()
+            assert second_created_at == first_created_at
+
+            buyer_list = client.get(
+                "/api/users/me/favorites?page=1&page_size=10",
+                headers=buyer_headers,
+            )
+            assert buyer_list.status_code == 200, buyer_list.text
+            item = buyer_list.json()["data"][0]
+            assert item["product_id"] == product_id
+            assert item["status"] == "Available"
+            assert item["product"]["seller"]["user_id"] == seller_id
+            assert "description" not in item["product"]
+            assert "email" not in item["product"]["seller"]
+            assert "student_id" not in item["product"]["seller"]
+
+            outsider_list = client.get(
+                "/api/users/me/favorites",
+                headers=outsider_headers,
+            )
+            seller_list = client.get(
+                "/api/users/me/favorites",
+                headers=seller_headers,
+            )
+            assert outsider_list.status_code == seller_list.status_code == 200
+            assert outsider_list.json()["data"] == []
+            assert seller_list.json()["data"] == []
+
+            hidden_update = connection.execute(
+                sa.text("UPDATE dbo.PRODUCTS SET status = 'Hidden' WHERE product_id = :product_id"),
+                {"product_id": product_id},
+            )
+            assert hidden_update.rowcount == 1
+            hidden_list = client.get(
+                "/api/users/me/favorites",
+                headers=buyer_headers,
+            )
+            assert hidden_list.status_code == 200, hidden_list.text
+            hidden_item = hidden_list.json()["data"][0]
+            assert hidden_item["status"] == "Hidden"
+            assert hidden_item["product"] is None
+
+            hidden_add = client.put(
+                f"/api/users/me/favorites/{product_id}",
+                headers=outsider_headers,
+            )
+            assert hidden_add.status_code == 404
+
+            delete_response = client.delete(
+                f"/api/users/me/favorites/{product_id}",
+                headers=buyer_headers,
+            )
+            assert delete_response.status_code == 204
+            repeated_delete = client.delete(
+                f"/api/users/me/favorites/{product_id}",
+                headers=buyer_headers,
+            )
+            assert repeated_delete.status_code == 204
+
+            empty_list = client.get(
+                "/api/users/me/favorites",
+                headers=buyer_headers,
+            )
+            assert empty_list.status_code == 200
+            assert empty_list.json()["data"] == []
+
+            transaction_count = connection.execute(
+                sa.text(
+                    "SELECT COUNT(*) FROM dbo.TRANSACTIONS WHERE product_id = :product_id"
+                ),
+                {"product_id": product_id},
+            ).scalar_one()
+            assert transaction_count == 0
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
