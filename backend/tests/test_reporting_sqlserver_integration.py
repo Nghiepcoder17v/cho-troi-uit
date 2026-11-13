@@ -16,7 +16,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
-pytestmark = pytest.mark.sqlserver_integration
+pytestmark = pytest.mark.db6b_sqlserver_integration
 
 
 @pytest.fixture()
