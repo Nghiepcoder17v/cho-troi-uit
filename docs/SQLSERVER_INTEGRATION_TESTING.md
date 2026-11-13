@@ -149,7 +149,7 @@ này chưa chạy thành công.
 | Pagination index | user_id ASC, created_at DESC, product_id DESC |
 | UTC default | created_at dùng SYSUTCDATETIME() |
 | Constraint behavior | Chặn favorite trùng và product FK không hợp lệ |
-| HTTP API trên SQL Server | FastAPI GET/PUT/DELETE chạy bằng Session gắn với SQL Server connection; xác minh query hint SQL Server, auth, idempotency, ownership, dữ liệu được che, tombstone Hidden và không tạo TRANSACTIONS |
+| HTTP API trên SQL Server | FastAPI GET/PUT/DELETE chạy qua engine/pool SQL Server riêng; xác minh query hint SQL Server, auth, idempotency, ownership, dữ liệu được che, tombstone Hidden và không tạo TRANSACTIONS |
 
 Bài HTTP API dùng engine/pool SQL Server riêng cho các request chạy ở worker thread.
 Dữ liệu được tạo trước test và xóa tường minh trong finally theo thứ tự phụ thuộc khóa
@@ -173,3 +173,12 @@ ngoại. URL vẫn bắt buộc trỏ đến database có hậu tố _test; khô
 | SQL Server API smoke test | Passed | 37 kiểm tra qua TestClient trên SQL Server test database; bao gồm auth, profile, privacy, product lifecycle, giao dịch, hủy và review |
 | Account Center UI smoke test | Passed | 14 kiểm tra bằng Chrome trên app nối tới `ChoTroUIT_Step7_Test`; gồm hồ sơ, privacy, quản lý tin, giỏ hàng, đơn mua/bán, theme và đổi mật khẩu |
 | Trạng thái migration database dự án | Verified | `UIT_Exchange`: backup COPY_ONLY đã verify; migrations Step 4 rồi Step 5 chạy thành công; metadata sau migration đầy đủ |
+
+
+## 7. DB-6A SQL Server CI result — 2026-11-13
+
+- [SQL Server integration workflow #3](https://github.com/Nghiepcoder17v/cho-troi-uit/actions/runs/43408035840): **Success**. It created a new `ChoTroUIT_DB6A_Test` database inside an ephemeral SQL Server 2022 Developer container, applied `01_init_schema.sql` only in that new container database, applied the Favorites migration twice, and ran all SQL Server integration tests.
+- Result: **6 passed, 89 deselected**. The six tests covered schema/columns/indexes/triggers, updated_at behavior, student ID constraint, filtered unique transaction index, Favorites composite PK/FKs/default/index, and a FastAPI Favorites HTTP round trip against SQL Server.
+- [Standard CI run #73](https://github.com/Nghiepcoder17v/cho-troi-uit/actions/runs/43408035719): **Success**. Frontend build, backend tests/lint and data pipeline tests/lint all passed. The backend test log reported 89 passed and 6 skipped because SQL Server tests are opt-in in the standard workflow.
+
+This result applies only to the disposable GitHub Actions test database. It does not prove that `USER_FAVORITES` exists in the user's local/shared/production database. Apply the migration separately only after confirming the intended target, backup/recovery plan, and a dedicated `_test` rehearsal.
