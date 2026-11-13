@@ -440,6 +440,7 @@ Full API contract: [docs/api_contract.md](docs/api_contract.md). Interactive API
 - [SQL Server Integration Testing](docs/SQLSERVER_INTEGRATION_TESTING.md) — test setup, safeguards, and verification record.
 - [DB-6C Moderator Bootstrap](docs/DB6C_MODERATOR_BOOTSTRAP_RUNBOOK.md) — operator-controlled initial ADMIN bootstrap.
 - [DB-6D Admin Controls](docs/DB6D_ADMIN_CONTROLS_RUNBOOK.md) — role management and production SQL principal prerequisites.
+- [DB-6 rollout readiness](docs/DB6_ROLLOUT_CHECKLIST.md) — backup/restore gates, runtime principal diagnostic, ordered migrations, verification, and recovery boundaries.
 - [Docker Compose](docs/DOCKER_COMPOSE.md) — local container deployment and database initialization.
 - [ETL Automation](docs/ETL_AUTOMATION.md) — scheduler, retry, watermark, and run monitoring.
 - [DWH SCD Type 2](docs/DWH_SCD2.md) — product history model and migration.
