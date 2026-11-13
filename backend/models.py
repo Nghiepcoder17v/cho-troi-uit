@@ -210,6 +210,49 @@ class UserRoleAssignment(Base):
     revoke_reason = Column(Unicode(250), nullable=True)
 
 
+class UserRoleAssignmentEvent(Base):
+    """Auditable role grant/revocation history; events are inserted, never updated."""
+
+    __tablename__ = "user_role_assignment_events"
+    __table_args__ = (
+        CheckConstraint("event_code IN ('GRANTED', 'REVOKED')", name="CHK_UserRoleAssignmentEvents_EventCode"),
+        CheckConstraint(
+            "length(reason) BETWEEN 8 AND 250",
+            name="CHK_UserRoleAssignmentEvents_Reason",
+        ),
+        Index(
+            "IX_UserRoleAssignmentEvents_TargetOccurred",
+            "target_user_id",
+            desc("occurred_at"),
+            desc("event_id"),
+        ),
+        Index(
+            "IX_UserRoleAssignmentEvents_AssignmentOccurred",
+            "assignment_id",
+            "occurred_at",
+            "event_id",
+        ),
+    )
+
+    event_id = Column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    assignment_id = Column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("user_role_assignments.assignment_id"),
+        nullable=False,
+    )
+    target_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    role_code = Column(String(32), ForeignKey("roles.role_code"), nullable=False)
+    actor_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    actor_role_code = Column(String(32), ForeignKey("roles.role_code"), nullable=False)
+    event_code = Column(String(16), nullable=False)
+    reason = Column(Unicode(250), nullable=False)
+    occurred_at = Column(DateTime, nullable=False, default=utcnow)
+
+
 class ProductModeration(Base):
     """One current moderation-hold row per product; history lives in ModerationAction."""
 
