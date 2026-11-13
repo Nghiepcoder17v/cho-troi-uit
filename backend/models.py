@@ -138,8 +138,8 @@ class ProductReport(Base):
             "reporter_user_id",
             "target_product_id",
             unique=True,
-            mssql_where=text("status IN ('Submitted', 'InReview', 'Escalated')"),
-            sqlite_where=text("status IN ('Submitted', 'InReview', 'Escalated')"),
+            mssql_where=text("status <> 'Dismissed' AND status <> 'Actioned'"),
+            sqlite_where=text("status <> 'Dismissed' AND status <> 'Actioned'"),
         ),
     )
 
