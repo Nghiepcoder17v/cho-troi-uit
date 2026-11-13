@@ -215,7 +215,7 @@ def test_actioned_hold_does_not_cancel_an_existing_reserved_transaction(
 
     transaction = client.post(
         "/api/transactions",
-        headers=seller_headers if False else buyer_headers,
+        headers=buyer_headers,
         json={"product_id": product_id, "amount": 40000},
     )
     assert transaction.status_code == 201, transaction.text
