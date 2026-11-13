@@ -583,6 +583,11 @@ class AdminRoleAssignmentEventListEnvelope(BaseModel):
     pagination: Pagination
 
 
+class AdminRoleAssignmentEnvelope(BaseModel):
+    status: str = "success"
+    data: AdminRoleAssignmentOut
+
+
 # ---------------------------------------------------------------- TRANSACTION
 class TransactionCreate(BaseModel):
     product_id: int
