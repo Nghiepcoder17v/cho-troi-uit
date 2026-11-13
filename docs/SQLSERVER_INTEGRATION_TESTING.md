@@ -126,7 +126,21 @@ python -m pytest -v -m sqlserver_integration
 Với SQL Login, dùng user/password phù hợp và URL-encode ký tự đặc biệt.
 Không commit connection string hoặc thông tin đăng nhập vào repository.
 
-### 5.3 Phạm vi DB-6A được kiểm tra
+### 5.3 Kiểm thử SQL Server tự động trên GitHub Actions
+
+Workflow .github/workflows/sqlserver-integration.yml tạo SQL Server 2022
+Developer container dùng một lần cho PR/push có thay đổi trong backend hoặc
+database_scripts. Workflow tự tạo ChoTroUIT_DB6A_Test, áp dụng 01_init_schema.sql
+chỉ trong database container đó, sau đó áp dụng migration Favorites hai lần
+để kiểm tra khả năng chạy lặp và chạy toàn bộ marker sqlserver_integration.
+
+Workflow này không kết nối DATABASE_URL của ứng dụng hoặc database bên ngoài.
+Có thể chạy thủ công từ tab Actions bằng workflow_dispatch. Kết quả workflow
+được tách biệt với CI thường; không xem các bài SQL Server là đạt nếu workflow
+này chưa chạy thành công.
+
+### Phạm vi DB-6A được kiểm tra
+
 
 | Test | Điều cần xác nhận |
 |---|---|
