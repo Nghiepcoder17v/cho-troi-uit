@@ -453,6 +453,8 @@ class ModerationReportOut(BaseModel):
 
 
 class ModerationActionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     action_id: int
     actor_user_id: int
     actor_role_code: str
