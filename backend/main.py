@@ -164,7 +164,7 @@ def add_favorite(
             models.Product.status != "Hidden",
             ~select(models.ProductModeration.product_id).where(
                 models.ProductModeration.product_id == models.Product.product_id,
-                models.ProductModeration.is_held.is_(True),
+                models.ProductModeration.is_held == True,
             ).exists(),
         )
         .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
@@ -303,7 +303,7 @@ def create_product_report(
             models.Product.status.in_(("Available", "Sold")),
             ~select(models.ProductModeration.product_id).where(
                 models.ProductModeration.product_id == models.Product.product_id,
-                models.ProductModeration.is_held.is_(True),
+                models.ProductModeration.is_held == True,
             ).exists(),
         )
         .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
@@ -791,7 +791,7 @@ def list_products(
         models.Product.status == status,
         ~select(models.ProductModeration.product_id).where(
             models.ProductModeration.product_id == models.Product.product_id,
-            models.ProductModeration.is_held.is_(True),
+            models.ProductModeration.is_held == True,
         ).exists(),
     ]
     if category_id is not None:
@@ -908,7 +908,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
             models.Product.product_id == product_id,
             ~select(models.ProductModeration.product_id).where(
                 models.ProductModeration.product_id == models.Product.product_id,
-                models.ProductModeration.is_held.is_(True),
+                models.ProductModeration.is_held == True,
             ).exists(),
         )
     )
@@ -1069,7 +1069,7 @@ def list_public_user_products(
         models.Product.status.in_(("Available", "Sold")),
         ~select(models.ProductModeration.product_id).where(
             models.ProductModeration.product_id == models.Product.product_id,
-            models.ProductModeration.is_held.is_(True),
+            models.ProductModeration.is_held == True,
         ).exists(),
     ]
     if status is not None:
