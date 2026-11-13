@@ -316,6 +316,46 @@ class ProductCreated(BaseModel):
     product_id: int
 
 
+# ---------------------------------------------------------------- PRODUCT REPORTS
+ProductReportReasonCode = Literal[
+    "PROHIBITED_ITEM",
+    "MISLEADING_LISTING",
+    "SUSPECTED_SCAM",
+    "SPAM_OR_DUPLICATE",
+    "OTHER",
+]
+
+
+class ProductReportCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_product_id: int = Field(..., ge=1)
+    reason_code: ProductReportReasonCode
+    description: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("description")
+    @classmethod
+    def _normalize_description(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+
+class ProductReportOut(BaseModel):
+    report_id: int
+    target_product_id: int
+    reason_code: ProductReportReasonCode
+    status: Literal["Submitted"]
+    submitted_at: datetime
+
+
+class ProductReportEnvelope(BaseModel):
+    status: str = "success"
+    message: str
+    data: ProductReportOut
+
+
 # ---------------------------------------------------------------- TRANSACTION
 class TransactionCreate(BaseModel):
     product_id: int
