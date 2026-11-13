@@ -467,76 +467,88 @@ def test_sqlserver_user_favorites_schema_composite_key_and_foreign_keys(
 def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
     sqlserver_connection: sa.Connection,
 ):
-    """Exercise Favorites HTTP routes against SQL Server, not SQLite.
+    """Exercise Favorites HTTP routes against an independent SQL Server pool.
 
-    Each request gets a Session bound to the fixture's externally managed
-    connection. create_savepoint keeps request-level commits inside the
-    fixture's outer transaction, which is rolled back after the test.
+    FastAPI runs synchronous routes in worker threads. The HTTP test therefore
+    uses an Engine pool instead of sharing the fixture's pyodbc connection
+    across threads. Test rows are explicitly removed in finally.
     """
     from fastapi.testclient import TestClient
-    from sqlalchemy.orm import Session
+    from sqlalchemy.orm import sessionmaker
 
     from database import get_db
     from main import app
     from security import create_access_token
 
-    connection = sqlserver_connection
-    seller_id = _insert_user(connection)
-    buyer_id = _insert_user(connection)
-    outsider_id = _insert_user(connection)
-    category_id = connection.execute(
-        sa.text(
-            """
-            INSERT INTO dbo.CATEGORIES (category_name)
-            OUTPUT INSERTED.category_id
-            VALUES (:category_name)
-            """
-        ),
-        {"category_name": f"FavoritesAPI-{uuid.uuid4().hex[:10]}"},
-    ).scalar_one()
-    product_id = connection.execute(
-        sa.text(
-            """
-            INSERT INTO dbo.PRODUCTS
-                (seller_id, category_id, title, description, price, condition, status)
-            OUTPUT INSERTED.product_id
-            VALUES
-                (:seller_id, :category_id, :title, :description, 42000, 'Good', 'Available')
-            """
-        ),
-        {
-            "seller_id": seller_id,
-            "category_id": category_id,
-            "title": f"Favorites SQL API {uuid.uuid4().hex[:8]}",
-            "description": "Private description must not be returned by Favorites.",
-        },
-    ).scalar_one()
+    database_name = sqlserver_connection.execute(sa.text("SELECT DB_NAME()")).scalar_one()
+    assert database_name.casefold().endswith("_test")
 
-    def override_get_db():
-        with Session(
-            bind=connection,
-            autoflush=False,
-            autocommit=False,
-            join_transaction_mode="create_savepoint",
-        ) as session:
-            yield session
-
-    app.dependency_overrides[get_db] = override_get_db
-    origin = "http://localhost:5173"
-    buyer_headers = {
-        "Cookie": f"access_token={create_access_token(buyer_id)}",
-        "Origin": origin,
-    }
-    seller_headers = {
-        "Cookie": f"access_token={create_access_token(seller_id)}",
-        "Origin": origin,
-    }
-    outsider_headers = {
-        "Cookie": f"access_token={create_access_token(outsider_id)}",
-        "Origin": origin,
-    }
+    engine = sa.create_engine(
+        os.environ["SQLSERVER_TEST_DATABASE_URL"],
+        pool_pre_ping=True,
+    )
+    SessionFactory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    created_user_ids: list[int] = []
+    category_id: int | None = None
+    product_id: int | None = None
 
     try:
+        with engine.begin() as setup:
+            seller_id = _insert_user(setup)
+            buyer_id = _insert_user(setup)
+            outsider_id = _insert_user(setup)
+            created_user_ids.extend([seller_id, buyer_id, outsider_id])
+
+            category_id = setup.execute(
+                sa.text(
+                    """
+                    INSERT INTO dbo.CATEGORIES (category_name)
+                    OUTPUT INSERTED.category_id
+                    VALUES (:category_name)
+                    """
+                ),
+                {"category_name": f"FavoritesAPI-{uuid.uuid4().hex[:10]}"},
+            ).scalar_one()
+            product_id = setup.execute(
+                sa.text(
+                    """
+                    INSERT INTO dbo.PRODUCTS
+                        (seller_id, category_id, title, description, price, condition, status)
+                    OUTPUT INSERTED.product_id
+                    VALUES
+                        (:seller_id, :category_id, :title, :description, 42000, 'Good', 'Available')
+                    """
+                ),
+                {
+                    "seller_id": seller_id,
+                    "category_id": category_id,
+                    "title": f"Favorites SQL API {uuid.uuid4().hex[:8]}",
+                    "description": "Private description must not be returned by Favorites.",
+                },
+            ).scalar_one()
+
+        def override_get_db():
+            db = SessionFactory()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        origin = "http://localhost:5173"
+        buyer_headers = {
+            "Cookie": f"access_token={create_access_token(buyer_id)}",
+            "Origin": origin,
+        }
+        seller_headers = {
+            "Cookie": f"access_token={create_access_token(seller_id)}",
+            "Origin": origin,
+        }
+        outsider_headers = {
+            "Cookie": f"access_token={create_access_token(outsider_id)}",
+            "Origin": origin,
+        }
+
         with TestClient(app, base_url="https://testserver", headers={"Origin": origin}) as client:
             assert client.get("/api/users/me/favorites").status_code == 401
 
@@ -546,16 +558,17 @@ def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
             )
             assert first_add.status_code == 200, first_add.text
 
-            first_created_at = connection.execute(
-                sa.text(
-                    """
-                    SELECT created_at
-                    FROM dbo.USER_FAVORITES
-                    WHERE user_id = :user_id AND product_id = :product_id
-                    """
-                ),
-                {"user_id": buyer_id, "product_id": product_id},
-            ).scalar_one()
+            with engine.connect() as read_connection:
+                first_created_at = read_connection.execute(
+                    sa.text(
+                        """
+                        SELECT created_at
+                        FROM dbo.USER_FAVORITES
+                        WHERE user_id = :user_id AND product_id = :product_id
+                        """
+                    ),
+                    {"user_id": buyer_id, "product_id": product_id},
+                ).scalar_one()
 
             duplicate_add = client.put(
                 f"/api/users/me/favorites/{product_id}",
@@ -563,16 +576,17 @@ def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
             )
             assert duplicate_add.status_code == 200, duplicate_add.text
 
-            second_created_at = connection.execute(
-                sa.text(
-                    """
-                    SELECT created_at
-                    FROM dbo.USER_FAVORITES
-                    WHERE user_id = :user_id AND product_id = :product_id
-                    """
-                ),
-                {"user_id": buyer_id, "product_id": product_id},
-            ).scalar_one()
+            with engine.connect() as read_connection:
+                second_created_at = read_connection.execute(
+                    sa.text(
+                        """
+                        SELECT created_at
+                        FROM dbo.USER_FAVORITES
+                        WHERE user_id = :user_id AND product_id = :product_id
+                        """
+                    ),
+                    {"user_id": buyer_id, "product_id": product_id},
+                ).scalar_one()
             assert second_created_at == first_created_at
 
             buyer_list = client.get(
@@ -606,11 +620,13 @@ def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
             assert outsider_list.json()["data"][0]["product_id"] == product_id
             assert seller_list.json()["data"] == []
 
-            hidden_update = connection.execute(
-                sa.text("UPDATE dbo.PRODUCTS SET status = 'Hidden' WHERE product_id = :product_id"),
-                {"product_id": product_id},
-            )
-            assert hidden_update.rowcount == 1
+            with engine.begin() as control:
+                hidden_update = control.execute(
+                    sa.text("UPDATE dbo.PRODUCTS SET status = 'Hidden' WHERE product_id = :product_id"),
+                    {"product_id": product_id},
+                )
+                assert hidden_update.rowcount == 1
+
             hidden_list = client.get(
                 "/api/users/me/favorites",
                 headers=buyer_headers,
@@ -652,13 +668,57 @@ def test_sqlserver_favorites_api_round_trip_uses_real_sqlserver_session(
             assert outsider_after_buyer_delete.json()["data"][0]["product_id"] == product_id
             assert outsider_after_buyer_delete.json()["data"][0]["product"] is None
 
-            transaction_count = connection.execute(
-                sa.text(
-                    "SELECT COUNT(*) FROM dbo.TRANSACTIONS WHERE product_id = :product_id"
-                ),
-                {"product_id": product_id},
-            ).scalar_one()
+            with engine.connect() as read_connection:
+                transaction_count = read_connection.execute(
+                    sa.text(
+                        "SELECT COUNT(*) FROM dbo.TRANSACTIONS WHERE product_id = :product_id"
+                    ),
+                    {"product_id": product_id},
+                ).scalar_one()
             assert transaction_count == 0
     finally:
         app.dependency_overrides.pop(get_db, None)
-
+        with engine.begin() as cleanup:
+            if product_id is not None:
+                cleanup.execute(
+                    sa.text(
+                        """
+                        DELETE FROM dbo.TRANSACTION_EVENTS
+                        WHERE transaction_id IN (
+                            SELECT transaction_id FROM dbo.TRANSACTIONS WHERE product_id = :product_id
+                        )
+                        """
+                    ),
+                    {"product_id": product_id},
+                )
+                cleanup.execute(
+                    sa.text("DELETE FROM dbo.REVIEWS WHERE transaction_id IN (SELECT transaction_id FROM dbo.TRANSACTIONS WHERE product_id = :product_id)"),
+                    {"product_id": product_id},
+                )
+                cleanup.execute(
+                    sa.text("DELETE FROM dbo.TRANSACTIONS WHERE product_id = :product_id"),
+                    {"product_id": product_id},
+                )
+                cleanup.execute(
+                    sa.text("DELETE FROM dbo.USER_FAVORITES WHERE product_id = :product_id"),
+                    {"product_id": product_id},
+                )
+                cleanup.execute(
+                    sa.text("DELETE FROM dbo.PRODUCTS WHERE product_id = :product_id"),
+                    {"product_id": product_id},
+                )
+            for created_user_id in created_user_ids:
+                cleanup.execute(
+                    sa.text("DELETE FROM dbo.USER_FAVORITES WHERE user_id = :user_id"),
+                    {"user_id": created_user_id},
+                )
+                cleanup.execute(
+                    sa.text("DELETE FROM dbo.USERS WHERE user_id = :user_id"),
+                    {"user_id": created_user_id},
+                )
+            if category_id is not None:
+                cleanup.execute(
+                    sa.text("DELETE FROM dbo.CATEGORIES WHERE category_id = :category_id"),
+                    {"category_id": category_id},
+                )
+        engine.dispose()

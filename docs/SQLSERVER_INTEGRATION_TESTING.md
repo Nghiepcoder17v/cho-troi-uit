@@ -137,9 +137,9 @@ Không commit connection string hoặc thông tin đăng nhập vào repository.
 | Constraint behavior | Chặn favorite trùng và product FK không hợp lệ |
 | HTTP API trên SQL Server | FastAPI GET/PUT/DELETE chạy bằng Session gắn với SQL Server connection; xác minh query hint SQL Server, auth, idempotency, ownership, dữ liệu được che, tombstone Hidden và không tạo TRANSACTIONS |
 
-Bài HTTP API dùng savepoint trong transaction ngoài của fixture; fixture rollback
-toàn bộ DML khi test kết thúc. Nó không cần và không được dùng database ứng dụng
-làm database test.
+Bài HTTP API dùng engine/pool SQL Server riêng cho các request chạy ở worker thread.
+Dữ liệu được tạo trước test và xóa tường minh trong finally theo thứ tự phụ thuộc khóa
+ngoại. URL vẫn bắt buộc trỏ đến database có hậu tố _test; không dùng database ứng dụng.
 
 ## 6. Phần cần xác nhận thủ công sau khi test tự động
 
