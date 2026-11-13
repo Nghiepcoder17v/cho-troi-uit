@@ -98,6 +98,10 @@ def test_sqlserver_product_reports_schema_constraints_and_unique_open_index(
         "reason_code": (False, "varchar", 0),
         "description": (True, "nvarchar", 0),
         "status": (False, "varchar", 0),
+        "assigned_moderator_user_id": (True, "int", 0),
+        "review_started_at": (True, "datetime2", 0),
+        "resolved_at": (True, "datetime2", 0),
+        "resolution_code": (True, "varchar", 0),
         "submitted_at": (False, "datetime2", 0),
         "updated_at": (False, "datetime2", 0),
     }
@@ -122,6 +126,7 @@ def test_sqlserver_product_reports_schema_constraints_and_unique_open_index(
     assert foreign_keys == {
         "reporter_user_id": ("USERS", "NO_ACTION"),
         "target_product_id": ("PRODUCTS", "NO_ACTION"),
+        "assigned_moderator_user_id": ("USERS", "NO_ACTION"),
     }
 
     checks = {
@@ -154,7 +159,8 @@ def test_sqlserver_product_reports_schema_constraints_and_unique_open_index(
     ).first()
     assert open_index is not None and open_index.is_unique
     normalized_filter = re.sub(r"[\[\]\s()]", "", open_index.filter_definition or "").casefold()
-    assert "status='submitted'" in normalized_filter, open_index.filter_definition
+    assert "status<>'dismissed'" in normalized_filter, open_index.filter_definition
+    assert "status<>'actioned'" in normalized_filter, open_index.filter_definition
 
     reporter_id = _insert_user(connection)
     seller_id = _insert_user(connection)
