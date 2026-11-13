@@ -1,5 +1,6 @@
 import math
 import os
+from datetime import timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -253,6 +254,123 @@ def list_my_favorites(
             "page_size": page_size,
             "total_items": total,
             "total_pages": math.ceil(total / page_size),
+        },
+    }
+
+
+# ==========================================================================
+# PRODUCT REPORT INTAKE (DB-6B)
+# ==========================================================================
+_PRODUCT_REPORT_LIMIT = 5
+_PRODUCT_REPORT_WINDOW = timedelta(hours=24)
+
+
+@app.post(
+    "/api/reports",
+    response_model=schemas.ProductReportEnvelope,
+    status_code=201,
+)
+def create_product_report(
+    body: schemas.ProductReportCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    now = models.utcnow()
+
+    # Serialize submissions per account on SQL Server so concurrent requests
+    # cannot race the rolling 24-hour limit. The lock is held until commit.
+    locked_reporter = db.scalar(
+        select(models.User)
+        .where(models.User.user_id == current_user.user_id)
+        .with_hint(models.User, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if locked_reporter is None:
+        raise HTTPException(status_code=401, detail="Tài khoản không tồn tại")
+    reporter_id = locked_reporter.user_id
+
+    # The public marketplace exposes Available and Sold listings. Hidden,
+    # Reserved and missing listings are not eligible report targets.
+    product = db.scalar(
+        select(models.Product)
+        .where(
+            models.Product.product_id == body.target_product_id,
+            models.Product.status.in_(("Available", "Sold")),
+        )
+        .with_hint(models.Product, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+    )
+    if product is None:
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại hoặc không thể báo cáo")
+    if product.seller_id == reporter_id:
+        raise HTTPException(status_code=400, detail="Bạn không thể báo cáo sản phẩm của chính mình")
+
+    existing_report_id = db.scalar(
+        select(models.ProductReport.report_id).where(
+            models.ProductReport.reporter_user_id == reporter_id,
+            models.ProductReport.target_product_id == body.target_product_id,
+            models.ProductReport.status == "Submitted",
+        )
+    )
+    if existing_report_id is not None:
+        raise HTTPException(status_code=409, detail="Bạn đã gửi báo cáo đang chờ xử lý cho sản phẩm này")
+
+    cutoff = now - _PRODUCT_REPORT_WINDOW
+    recent_count = db.scalar(
+        select(func.count())
+        .select_from(models.ProductReport)
+        .where(
+            models.ProductReport.reporter_user_id == reporter_id,
+            models.ProductReport.submitted_at >= cutoff,
+            models.ProductReport.submitted_at <= now,
+        )
+    ) or 0
+    if recent_count >= _PRODUCT_REPORT_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail="Bạn đã đạt giới hạn 5 báo cáo trong 24 giờ. Vui lòng thử lại sau.",
+        )
+
+    report = models.ProductReport(
+        reporter_user_id=reporter_id,
+        target_product_id=body.target_product_id,
+        reason_code=body.reason_code,
+        description=body.description,
+        status="Submitted",
+        submitted_at=now,
+        updated_at=now,
+    )
+    db.add(report)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        duplicate = db.scalar(
+            select(models.ProductReport.report_id).where(
+                models.ProductReport.reporter_user_id == reporter_id,
+                models.ProductReport.target_product_id == body.target_product_id,
+                models.ProductReport.status == "Submitted",
+            )
+        )
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Bạn đã gửi báo cáo đang chờ xử lý cho sản phẩm này",
+            )
+        raise HTTPException(
+            status_code=409,
+            detail="Không thể gửi báo cáo vì dữ liệu vừa thay đổi. Vui lòng thử lại.",
+        )
+
+    db.refresh(report)
+    # The receipt intentionally excludes reporter identity and the description.
+    return {
+        "status": "success",
+        "message": "Đã tiếp nhận báo cáo. Báo cáo chưa phải là kết luận vi phạm.",
+        "data": {
+            "report_id": report.report_id,
+            "target_product_id": report.target_product_id,
+            "reason_code": report.reason_code,
+            "status": report.status,
+            "submitted_at": report.submitted_at,
         },
     }
 

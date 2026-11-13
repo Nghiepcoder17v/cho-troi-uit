@@ -237,3 +237,24 @@ Trạng thái nghiệp vụ:
 - Chỉ giao dịch `Completed` mới đủ điều kiện đánh giá. Các giao dịch
   `Completed` có từ trước Step 5 cũng được đánh giá; timestamp xác nhận cũ
   không bắt buộc phải có.
+
+
+---
+
+## Product reports (DB-6B)
+
+### Submit a product report
+
+POST /api/reports — requires the signed-in UIT student cookie.
+
+Request fields:
+
+- target_product_id: positive product ID.
+- reason_code: one of PROHIBITED_ITEM, MISLEADING_LISTING, SUSPECTED_SCAM, SPAM_OR_DUPLICATE, OTHER.
+- description: optional plain-text context, maximum 500 characters.
+
+The server derives the reporter from the authenticated session. Clients cannot supply a reporter ID, status, assignment or decision. Only publicly visible Available and Sold listings are eligible; missing, Hidden and Reserved listings are rejected, as are self-reports.
+
+A reporter may have one open (Submitted) report per product and may create at most five reports in a rolling 24-hour window. The response contains a receipt and Submitted state only. It does not reveal the reporter identity or description, and submission does not hide the product, notify the seller, create a transaction or apply a sanction.
+
+DB-6B does not expose a report-list endpoint, moderator queue, moderation decision API, account report, attachment upload, role provisioning, account suspension or appeals. Report and decision retention duration remains a separate policy decision.
