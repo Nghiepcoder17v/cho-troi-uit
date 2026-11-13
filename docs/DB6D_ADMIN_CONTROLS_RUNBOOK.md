@@ -13,7 +13,7 @@ DB-6D adds admin-only application controls for granting and revoking the two fix
 
 ## Initial bootstrap
 
-The first ADMIN remains an operator/DBA-controlled action described in DB6C_MODERATOR_BOOTSTRAP_RUNBOOK.md. DB-6D does not make the first administrator self-service and does not select or grant a role to a real user.
+The first ADMIN remains an operator/DBA-controlled action described in DB6C_MODERATOR_BOOTSTRAP_RUNBOOK.md. DB-6D does not make the first administrator self-service and does not select or grant a role to a real user. That first bootstrap assignment is recorded by the assignment row and the operator's approved change record; the application event table records subsequent ADMIN-managed grant/revoke actions.
 
 ## Scope
 
