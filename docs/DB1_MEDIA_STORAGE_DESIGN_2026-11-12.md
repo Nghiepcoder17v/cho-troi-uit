@@ -1,7 +1,7 @@
 # DB-1 — Media Storage and Profile Media Architecture
 
-**Date:** 2026-11-12  
-**Status:** Design proposal; no provider-specific implementation or database migration  
+**Updated:** 2026-11-15  
+**Status:** Storage architecture and URL policy decided; no provider credentials, application adapter or database migration has been deployed.  
 **Scope:** Product images, user avatar and bio foundations for FE-3/FE-5.
 
 ## 1. Decisions already approved
@@ -16,7 +16,7 @@ The following are established project requirements:
 - Bio and avatar may appear on public profiles; email, student ID and password hash remain private.
 - Avatar, bio and product media must not be added to the DWH extraction in this scope.
 
-These are the approved initial limits. They do not identify a production storage vendor.
+These are the approved initial limits. The first hosted provider default is recorded in section 2; provisioning remains an implementation gate.
 
 ## 2. Deployment survey and provider decision
 
@@ -24,15 +24,40 @@ The repository currently documents:
 - Local development with SQL Server and Windows Authentication or SQL login.
 - Docker Compose with FastAPI, Nginx frontend and SQL Server.
 - A named Docker volume for SQL Server data.
-- No production cloud host, object-storage account, media CDN, domain or production secret configuration.
+- No confirmed production cloud host, object-storage account, media CDN, domain or production secret configuration.
 
-**Provider decision: unresolved.** The repository does not contain enough deployment information to responsibly choose AWS S3, Cloudflare R2, Azure Blob Storage or another vendor. Do not hard-code a vendor SDK or provider-specific URL format yet.
+### 2.1 Decisions for the first implementation
 
-Recommended implementation boundary:
-- Define a small storage adapter around upload, read-URL generation and delete operations.
-- Use an S3-compatible API boundary to avoid coupling business logic to a vendor.
-- Keep endpoint, bucket/container, credentials, region and public-base URL in environment configuration; never commit secrets.
-- Choose the production provider and local development implementation only after the deployment target is known. No storage service is added to Docker Compose in this design-only step.
+**Production default: Cloudflare R2 Standard, using a private bucket and its S3-compatible API.** This is the chosen default for the first hosted implementation, not a claim that an account or bucket has already been provisioned. The storage adapter must remain S3-compatible so the project can move to another provider without changing SQL Server schema or marketplace business logic.
+
+**Local development: a filesystem storage adapter.** Store objects beneath a configurable data directory outside the frontend static assets. Serve local objects only through an API route that applies the same media visibility checks as the hosted path. Use a temporary directory in unit tests. A persistent Docker volume can be added when the adapter is integrated into Compose; do not expose the directory as a public static mount.
+
+**Do not add MinIO Community Server as a new dependency.** Its upstream repository was archived on 2026-04-25 and is marked no longer maintained. This project should not introduce a new local storage dependency without an active maintenance path.
+
+### 2.2 Why R2 is the default
+
+- R2 exposes an S3-compatible API and supports server-generated presigned GET URLs, so a standard S3 SDK can implement the adapter.
+- The Standard storage pricing published on 2026-11-15 lists $0.015 per GB-month and no egress bandwidth charge. This is a useful cost profile for a small image-heavy student marketplace, although actual cost still depends on stored volume and request counts.
+- R2 buckets are private by default. Keep the bucket private; do not enable public bucket access or the development r2.dev URL.
+- R2 presigned URLs work on the R2 S3 API domain, not a custom domain. The selected private-read policy therefore prioritizes access control over a branded public media hostname and custom-domain CDN caching.
+
+Official references reviewed on 2026-11-15:
+- [R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/) — supported methods, expiry and hostname limitations.
+- [R2 Boto3 guide](https://developers.cloudflare.com/r2/examples/aws/boto3/) — official Python SDK client configuration and S3 endpoint setup.
+- [R2 public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/) — private-by-default behavior and public-access options.
+- [R2 pricing](https://developers.cloudflare.com/r2/pricing/) — current storage, operation and egress pricing.
+- [MinIO upstream repository](https://github.com/minio/minio) — archive and maintenance status.
+
+### 2.3 Adapter and configuration boundary
+
+Define a narrow storage interface for:
+- Uploading already-validated, normalized bytes to a server-generated key.
+- Deleting an object by key, idempotently where the provider supports it.
+- Generating a short-lived read URL for a key.
+
+Provider selection belongs in environment configuration, not domain logic. The hosted adapter will receive the S3 endpoint, bucket, region, access key and secret key from runtime secrets. Local mode will receive only a filesystem root. Never commit storage credentials, print them in diagnostics or expose them to the browser.
+
+Uploads remain multipart to FastAPI for the first implementation: the server validates and normalizes the image before storage. Do not introduce direct browser-to-R2 PUT uploads in the first iteration; that would add CORS, upload-token and untrusted-object-finalization complexity without a current requirement.
 
 ## 3. Proposed logical data model
 
@@ -153,13 +178,18 @@ Suggested media response fields:
 
 The API generates the read URL from the storage adapter. SQL Server stores only the storage key and metadata, never the resolved URL.
 
-## 8. URL access policy — decision required before implementation
+## 8. URL access policy — decided
 
-Product photos and avatars are intended for public-facing marketplace surfaces, but the project has not selected between:
-- Stable public/CDN read URLs for public media.
-- Short-lived signed read URLs.
+Use **private object storage plus short-lived presigned GET URLs** for hosted media. Set the initial `MEDIA_READ_URL_TTL_SECONDS` default to **900 seconds (15 minutes)**. The API generates a URL only after it has checked the relevant resource access rule:
+- Public product media: the listing is currently visible through the public marketplace rules and is not under a moderation hold.
+- Hidden product media: only the authenticated owner may receive a read URL.
+- Avatar: public profile visibility follows the existing public-profile rules; the owner may always access their own avatar.
 
-Do not store either URL form in SQL Server. The selected strategy affects cache behavior, URL expiry, CDN configuration, and how frontend image refresh works. Keep it behind the storage adapter so it can be changed without changing business tables.
+A presigned URL is a bearer capability: anyone who obtains it can read that object until it expires. Do not log it, persist it in SQL Server, put it in audit records, or return it from an API response that otherwise hides the associated resource. A listing becoming hidden cannot revoke an already-issued URL instantly; the 15-minute expiry bounds that exposure window. Keep the bucket private and never solve this by making the entire bucket public.
+
+The API response may include a `url` field as expected by the existing FE-3 DTO. Add a read-URL refresh operation (for example, `GET /api/media/{media_id}/read-url`) that re-runs the same authorization checks. The frontend must request a fresh URL and retry an expired/failed image at most once; it must not mark an expired signature as a permanently missing asset or enter an infinite retry loop.
+
+R2 presigned URLs use the R2 S3 API hostname and cannot be generated against a custom domain. Accept this trade-off for the first implementation. Do not enable public bucket access, `r2.dev`, or a public CDN path as a shortcut. A future CDN/Worker gateway requires a separate design that preserves the same hidden-listing and moderation authorization rules.
 
 ## 9. DWH boundary
 
@@ -174,25 +204,25 @@ The existing explicit ETL column lists should remain unchanged. Media/profile cu
 
 ## 10. Migration and implementation sequence
 
-When DB-0 has been verified against a dedicated SQL Server `*_test` database and the provider/URL policy is settled:
+The storage decision is now settled, but DB-0 runtime verification remains a hard gate for SQL changes. Work can proceed in this order without connecting to or modifying the user's database:
 
-1. Add a versioned additive T-SQL migration for MEDIA_ASSETS, PRODUCT_MEDIA, USER_AVATARS and USERS.bio.
-2. Add ORM models and Pydantic DTOs; keep SQL Server as the schema source of truth.
-3. Add storage adapter configuration and provider implementation.
-4. Add upload validation, ownership checks, lifecycle/cleanup worker and tests.
-5. Update `docs/api_contract.md`, Docker/local configuration and migration documentation.
-6. Add SQL Server integration tests for constraints, concurrency, uniqueness and cleanup behavior.
-7. Integrate FE-3/FE-5 only after the real API is available.
+1. Implement and unit-test the filesystem and S3-compatible storage adapters independently of SQL Server.
+2. Verify DB-0 against a dedicated SQL Server `*_test` database and record the actual schema/migration state.
+3. Add a versioned additive T-SQL migration for MEDIA_ASSETS, PRODUCT_MEDIA, USER_AVATARS and USERS.bio only after the schema baseline and recovery plan are approved.
+4. Add ORM models and Pydantic DTOs; keep SQL Server as the schema source of truth.
+5. Add upload validation, ownership checks, lifecycle/cleanup worker and tests.
+6. Update `docs/api_contract.md`, Docker/local configuration and migration documentation.
+7. Add SQL Server integration tests for constraints, concurrency, uniqueness and cleanup behavior.
+8. Integrate FE-3/FE-5 only after the real API is available.
 
 Do not edit existing data or run a migration on the user's database without a verified backup. Do not change `01_init_schema.sql` in a way that drops or recreates existing tables; keep fresh-install schema synchronized only when implementation is approved and tested.
 
 ## 11. Open implementation gates
 
-- [ ] Verify the actual target SQL Server schema and applied migration state.
-- [ ] Identify the production hosting/deployment target.
-- [ ] Select object-storage provider and local development strategy.
-- [ ] Select public/CDN versus signed read URL policy.
-- [ ] Set image pixel/dimension limits and cleanup retry/retention policy.
-- [ ] Verify backup and rollback/recovery plan for the target database.
+- [ ] Verify the actual target SQL Server schema and applied migration state (DB-0; user is performing the local check).
+- [ ] Provision the R2 account/bucket and runtime credentials, or record an approved S3-compatible replacement if the eventual deployment host already supplies object storage.
+- [ ] Set image pixel/dimension limits and cleanup retry/retention policy before upload endpoints are exposed.
+- [ ] Verify backup and rollback/recovery plan for the target database before applying the additive migration.
+- [ ] Decide and document the persistent local media volume when integrating the filesystem adapter into Docker Compose.
 
-**DB-1 design output:** logical schema, API proposal, validation/security rules, object lifecycle and DWH boundary are documented. Provider-specific implementation and SQL migration remain intentionally out of scope until the gates above are satisfied.
+**DB-1 design output:** logical schema, API proposal, validation/security rules, object lifecycle, provider default, local development strategy, read-URL authorization and DWH boundary are documented. Storage adapter implementation can proceed independently; SQL migration remains blocked on DB-0 verification and the target database recovery plan.
