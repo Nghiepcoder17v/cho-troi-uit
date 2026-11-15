@@ -7,6 +7,7 @@ venv/
 .pytest_cache/
 
 # Bí mật & cấu hình cục bộ (KHÔNG commit). .env.example thì được commit.
+**/.media/
 .env
 .env.compose
 
