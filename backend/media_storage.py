@@ -165,7 +165,7 @@ def create_media_storage(
 
     if backend not in {"s3", "r2"}:
         raise MediaStorageConfigurationError(
-            "MEDIA_STORAGE_BACKEND must be 'local' or 's3'"
+            "MEDIA_STORAGE_BACKEND must be 'local', 's3' or 'r2'"
         )
 
     required = (
@@ -194,9 +194,13 @@ def create_media_storage(
             "Install backend requirements to use the S3 media storage adapter"
         ) from exc
 
+    endpoint_url = env["MEDIA_S3_ENDPOINT_URL"].strip()
+    if not endpoint_url.startswith("https://"):
+        raise MediaStorageConfigurationError("MEDIA_S3_ENDPOINT_URL must use HTTPS")
+
     client = boto3.client(
         "s3",
-        endpoint_url=env["MEDIA_S3_ENDPOINT_URL"].strip(),
+        endpoint_url=endpoint_url,
         region_name=env.get("MEDIA_S3_REGION", "auto").strip() or "auto",
         aws_access_key_id=env["MEDIA_S3_ACCESS_KEY_ID"],
         aws_secret_access_key=env["MEDIA_S3_SECRET_ACCESS_KEY"],
