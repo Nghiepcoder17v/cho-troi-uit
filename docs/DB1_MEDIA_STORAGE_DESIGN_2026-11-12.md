@@ -41,6 +41,12 @@ The repository currently documents:
 - R2 buckets are private by default. Keep the bucket private; do not enable public bucket access or the development r2.dev URL.
 - R2 presigned URLs work on the R2 S3 API domain, not a custom domain. The selected private-read policy therefore prioritizes access control over a branded public media hostname and custom-domain CDN caching.
 
+Official references reviewed on 2026-11-15:
+- [R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/) — supported methods, expiry and hostname limitations.
+- [R2 public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/) — private-by-default behavior and public-access options.
+- [R2 pricing](https://developers.cloudflare.com/r2/pricing/) — current storage, operation and egress pricing.
+- [MinIO upstream repository](https://github.com/minio/minio) — archive and maintenance status.
+
 ### 2.3 Adapter and configuration boundary
 
 Define a narrow storage interface for:
