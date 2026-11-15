@@ -204,10 +204,7 @@ def create_media_storage(
         region_name=env.get("MEDIA_S3_REGION", "auto").strip() or "auto",
         aws_access_key_id=env["MEDIA_S3_ACCESS_KEY_ID"],
         aws_secret_access_key=env["MEDIA_S3_SECRET_ACCESS_KEY"],
-        config=Config(
-            signature_version="s3v4",
-            s3={"addressing_style": "path"},
-        ),
+        config=Config(signature_version="s3v4"),
     )
     return S3MediaStorage(
         client=client,
