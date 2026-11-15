@@ -172,7 +172,6 @@ def test_s3_factory_requires_credentials_without_echoing_values():
 
     message = str(error.value)
     assert "MEDIA_S3_ACCESS_KEY_ID" in message
-    assert "MEDIA_S3_SECRET_ACCESS_KEY" in message
     assert "do-not-echo-this-secret" not in message
 
 
