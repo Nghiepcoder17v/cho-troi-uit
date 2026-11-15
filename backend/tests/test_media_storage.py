@@ -36,7 +36,7 @@ def test_local_storage_writes_reads_and_returns_api_url(tmp_path):
     assert storage.create_read_url(key) == f"/api/media/local/{key}"
 
 
-def test_local_storage_quotes_url_path_segments(tmp_path):
+def test_local_storage_returns_api_read_url(tmp_path):
     storage = LocalFileMediaStorage(tmp_path)
     key = "products/123/image-name.webp"
     storage.put_bytes(key, b"image", "image/webp")
@@ -161,14 +161,19 @@ def test_local_storage_is_the_default_factory_backend(tmp_path):
     assert isinstance(storage, LocalFileMediaStorage)
 
 
-def test_s3_factory_requires_credentials_without_echoing_secrets():
+def test_s3_factory_requires_credentials_without_echoing_values():
     with pytest.raises(MediaStorageConfigurationError) as error:
-        create_media_storage({"MEDIA_STORAGE_BACKEND": "s3"})
+        create_media_storage(
+            {
+                "MEDIA_STORAGE_BACKEND": "s3",
+                "MEDIA_S3_SECRET_ACCESS_KEY": "do-not-echo-this-secret",
+            }
+        )
 
     message = str(error.value)
     assert "MEDIA_S3_ACCESS_KEY_ID" in message
     assert "MEDIA_S3_SECRET_ACCESS_KEY" in message
-    assert "secret" not in message.lower()
+    assert "do-not-echo-this-secret" not in message
 
 
 def test_factory_rejects_unknown_backend():
