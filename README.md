@@ -438,6 +438,7 @@ Full API contract: [docs/api_contract.md](docs/api_contract.md). Interactive API
 
 - [API Contract](docs/api_contract.md) — request/response definitions and business rules.
 - [SQL Server Integration Testing](docs/SQLSERVER_INTEGRATION_TESTING.md) — test setup, safeguards, and verification record.
+- [DB-1 Media Storage Design](docs/DB1_MEDIA_STORAGE_DESIGN_2026-11-12.md) — storage adapters, private media access, provider decision, and profile/media schema design.
 - [DB-6C Moderator Bootstrap](docs/DB6C_MODERATOR_BOOTSTRAP_RUNBOOK.md) — operator-controlled initial ADMIN bootstrap.
 - [DB-6D Admin Controls](docs/DB6D_ADMIN_CONTROLS_RUNBOOK.md) — role management and production SQL principal prerequisites.
 - [DB-6 rollout readiness](docs/DB6_ROLLOUT_CHECKLIST.md) — backup/restore gates, runtime principal diagnostic, ordered migrations, verification, and recovery boundaries.
