@@ -16,7 +16,7 @@ The following are established project requirements:
 - Bio and avatar may appear on public profiles; email, student ID and password hash remain private.
 - Avatar, bio and product media must not be added to the DWH extraction in this scope.
 
-These are the approved initial limits. They do not identify a production storage vendor.
+These are the approved initial limits. The first hosted provider default is recorded in section 2; provisioning remains an implementation gate.
 
 ## 2. Deployment survey and provider decision
 
