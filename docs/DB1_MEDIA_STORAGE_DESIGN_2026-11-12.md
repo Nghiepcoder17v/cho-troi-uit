@@ -43,6 +43,7 @@ The repository currently documents:
 
 Official references reviewed on 2026-11-15:
 - [R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/) — supported methods, expiry and hostname limitations.
+- [R2 Boto3 guide](https://developers.cloudflare.com/r2/examples/aws/boto3/) — official Python SDK client configuration and S3 endpoint setup.
 - [R2 public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/) — private-by-default behavior and public-access options.
 - [R2 pricing](https://developers.cloudflare.com/r2/pricing/) — current storage, operation and egress pricing.
 - [MinIO upstream repository](https://github.com/minio/minio) — archive and maintenance status.
