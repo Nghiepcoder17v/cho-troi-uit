@@ -1,480 +1,230 @@
-# Chợ Trời UIT | UIT Student Marketplace
+<div align="center">
 
-**Nền tảng C2C dành cho sinh viên UIT** — đăng bán, tìm mua và trao đổi đồ cũ, kết hợp hệ thống phân tích dữ liệu bằng Data Warehouse và ETL.
+# 🛒 Chợ Trời UIT
 
-**A student-to-student C2C marketplace for UIT** — list, discover, and exchange pre-owned items, supported by a SQL Server Data Warehouse and an ETL pipeline.
+**Marketplace C2C dành cho sinh viên UIT, kèm hệ thống phân tích dữ liệu (ETL + Data Warehouse)**
+
+*A student-to-student marketplace for UIT, backed by an incremental ETL pipeline and a Star-Schema Data Warehouse.*
 
 [![CI](https://github.com/Nghiepcoder17v/cho-troi-uit/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Nghiepcoder17v/cho-troi-uit/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![SQL Server](https://img.shields.io/badge/SQL%20Server-CC2927?logo=microsoftsqlserver&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker%20Compose-2496ED?logo=docker&logoColor=white)
+
+<!-- TODO: thêm ảnh chụp màn hình hoặc GIF demo tại đây -->
+<!-- ![Demo](docs/assets/demo.png) -->
+
+</div>
 
 ---
 
-## Mục lục | Contents
+## Tổng quan
 
-- [Tổng quan | Overview](#tổng-quan--overview)
-- [Tính năng chính | Key Features](#tính-năng-chính--key-features)
-- [Nghiệp vụ mua bán | Marketplace Workflow](#nghiệp-vụ-mua-bán--marketplace-workflow)
-- [Kiến trúc và dữ liệu | Architecture & Data](#kiến-trúc-và-dữ-liệu--architecture--data)
-- [Công nghệ | Technology Stack](#công-nghệ--technology-stack)
-- [Cấu trúc dự án | Project Structure](#cấu-trúc-dự-án--project-structure)
-- [Cài đặt local | Local Setup](#cài-đặt-local--local-setup)
-- [Docker Compose](#docker-compose)
-- [ETL và Analytics](#etl-và-analytics)
-- [Kiểm thử và CI | Testing & CI](#kiểm-thử-và-ci--testing--ci)
-- [Bảo mật | Security](#bảo-mật--security)
-- [Trạng thái dự án | Project Status](#trạng-thái-dự-án--project-status)
+Chợ Trời UIT cho phép sinh viên Trường ĐH Công nghệ Thông tin – ĐHQG-HCM **đăng bán, tìm mua và trao đổi đồ cũ** một cách an toàn, minh bạch. Mỗi giao dịch đi qua quy trình hai bên xác nhận và kết thúc bằng đánh giá hai chiều để xây dựng uy tín.
 
-## Tổng quan | Overview
+Điểm khác biệt của dự án là **luồng dữ liệu phân tích đi kèm**: dữ liệu nghiệp vụ (OLTP) được ETL tăng dần sang Data Warehouse dạng Star Schema để trả lời các câu hỏi như *ngành nào mua nhiều thiết bị IT nhất*, *giáo trình bán chạy vào tháng nào*, *bao lâu thì một món đồ được bán*.
 
-**Tiếng Việt**
+> **TL;DR (EN):** Full-stack C2C marketplace (React + FastAPI + SQL Server) with a transaction state machine, bilateral reviews, moderation and role-based admin controls, plus a Data Engineering track: incremental, idempotent ETL → Star-Schema DWH with SCD Type 2, scheduled runs, run logs and SQL analytics. 160+ automated tests and a 3-job CI pipeline.
 
-Chợ Trời UIT là marketplace C2C phục vụ cộng đồng sinh viên Trường Đại học Công nghệ Thông tin – ĐHQG-HCM. Người dùng có thể đăng bán sản phẩm đã qua sử dụng, tìm kiếm theo từ khóa hoặc danh mục, gửi yêu cầu mua và đánh giá đối phương sau khi giao dịch hoàn tất.
+## Điểm nổi bật
 
-Dự án đồng thời xây dựng luồng dữ liệu phân tích riêng: dữ liệu nghiệp vụ được lưu trong SQL Server OLTP, sau đó ETL sang Data Warehouse dạng Star Schema để phục vụ báo cáo. Thanh toán và bàn giao sản phẩm được thực hiện bên ngoài nền tảng.
-
-**English**
-
-Chợ Trời UIT is a C2C marketplace for the University of Information Technology community. Students can list pre-owned items, browse and search listings, submit purchase requests, and review the other party after a transaction is completed.
-
-The project also includes an analytics data flow: operational records are stored in SQL Server OLTP and processed into a Star Schema Data Warehouse for reporting. Payments and item handover take place outside the platform.
-
-## Tính năng chính | Key Features
-
-| Phân hệ / Module | Chức năng / Capabilities |
+| | |
 |---|---|
-| **Marketplace** | Khám phá, tìm kiếm, lọc danh mục và phân trang sản phẩm. / Browse, search, filter, and paginate listings. |
-| **Tài khoản / Accounts** | Đăng ký UIT, đăng nhập, cập nhật hồ sơ và đổi mật khẩu. / UIT registration, sign-in, profile updates, and password changes. |
-| **Đăng bán / Listings** | Tạo, chỉnh sửa, ẩn và mở bán lại tin đăng theo trạng thái. / Create, edit, hide, and relist items according to business rules. |
-| **Giao dịch / Transactions** | Yêu cầu mua, người bán chấp nhận/từ chối, hai bên xác nhận hoàn tất. / Purchase requests, seller decisions, and confirmation by both parties. |
-| **Uy tín / Reputation** | Đánh giá hai chiều sau giao dịch hoàn tất. / Bilateral reviews after completed transactions. |
-| **Account Center** | Quản lý hồ sơ, tin đăng, đơn mua/bán, giỏ hàng và cài đặt. / Manage profile, listings, purchases, sales, cart, and settings. |
-| **Moderation & Admin Controls** | Báo cáo tin đăng, hàng đợi kiểm duyệt và moderation hold; ADMIN quản lý vai trò MODERATOR/ADMIN có audit. / Listing reports, moderation queue and holds; ADMIN manages MODERATOR/ADMIN roles with an audit trail. |
-| **Data Warehouse** | Star Schema và lịch sử sản phẩm SCD Type 2. / Star Schema with SCD Type 2 product history. |
-| **ETL & Analytics** | ETL tăng dần, watermark, retry, run log và báo cáo SQL. / Incremental ETL, watermarks, retries, run logs, and SQL reports. |
+| **Quy trình giao dịch chặt chẽ** | Máy trạng thái `Available → Reserved → Accepted → Completed → Sold`; một sản phẩm chỉ có một giao dịch đang mở; hai bên xác nhận riêng biệt. |
+| **Uy tín hai chiều** | Chỉ giao dịch `Completed` mới được đánh giá. |
+| **Kiểm duyệt & phân quyền** | Báo cáo tin đăng, hàng đợi moderation, vai trò `MODERATOR`/`ADMIN` có audit log cấp/thu hồi quyền. |
+| **Bảo mật** | bcrypt, JWT trong cookie `HttpOnly` + `Secure` + `SameSite=Lax`, kiểm tra `Origin`, danh tính buyer/seller lấy từ phiên đăng nhập, chỉ chấp nhận email `@gm.uit.edu.vn`. |
+| **ETL tăng dần, idempotent** | Extract theo `updated_at` + watermark, cửa sổ overlap 5 phút, load dimension trước fact trong transaction, ghi lại dòng bị từ chối và lịch sử mỗi lần chạy. |
+| **Data Warehouse** | Star Schema (`dim_user`, `dim_product`, `dim_date`, `fact_transactions`), `dim_product` theo **SCD Type 2**. |
+| **Chất lượng kỹ thuật** | 160+ test (Pytest), Ruff, TypeScript build, GitHub Actions 3 job độc lập, SQL Server integration test trên database cô lập. |
+| **Triển khai** | Docker Compose một lệnh: Nginx + FastAPI + SQL Server + ETL/scheduler. |
 
-## Nghiệp vụ mua bán | Marketplace Workflow
-
-Yêu cầu mua không đồng nghĩa với giao dịch đã hoàn tất. Sản phẩm được giữ chỗ trong thời gian hai bên xử lý yêu cầu.
-
-A purchase request does not mean the transaction is complete. The listing remains reserved while the parties process the request.
-
-```mermaid
-flowchart TD
-    A["Available"] -->|"Buyer submits request"| B["Reserved"]
-    B --> C["Pending"]
-    C -->|"Seller accepts"| D["Accepted"]
-    C -->|"Seller rejects / Either party cancels"| X["Cancelled"]
-    D -->|"Either party cancels"| X
-    D -->|"Both parties confirm"| E["Completed"]
-    X -->|"Release listing"| A
-    E --> F["Sold"]
-    E --> G["Bilateral reviews"]
-```
-
-- Người mua không thể tự mua sản phẩm của mình; một sản phẩm không thể có nhiều giao dịch đang mở.
-- Người bán phải chấp nhận yêu cầu trước khi giao dịch chuyển sang trạng thái Accepted.
-- Buyer và seller xác nhận riêng biệt sau khi tự bàn giao/thanh toán bên ngoài hệ thống.
-- Chỉ khi cả hai xác nhận, giao dịch mới thành Completed và sản phẩm thành Sold.
-- Chỉ giao dịch Completed mới đủ điều kiện để hai bên đánh giá nhau.
-
-- Buyers cannot purchase their own listings, and a listing cannot have multiple active transactions.
-- The seller must accept a request before it enters the Accepted state.
-- Buyer and seller confirm separately after arranging payment and handover outside the platform.
-- The transaction becomes Completed and the listing becomes Sold only after both confirmations.
-- Reviews are available only for Completed transactions.
-
-## Kiến trúc và dữ liệu | Architecture & Data
-
-### Kiến trúc tổng thể | System Architecture
+## Kiến trúc
 
 ```mermaid
 flowchart LR
-    FE["React + TypeScript"] -->|"REST API"| API["FastAPI"]
+    FE["React + TypeScript"] -->|REST API| API["FastAPI"]
     API --> ORM["SQLAlchemy"]
-    ORM --> OLTP[("SQL Server OLTP")]
+    ORM --> OLTP[("SQL Server<br/>OLTP")]
     OLTP -->|"Incremental extract"| ETL["Python ETL"]
-    ETL -->|"Transform & load"| DWH[("SQL Server Data Warehouse")]
+    ETL -->|"Transform & load"| DWH[("SQL Server<br/>Data Warehouse")]
     DWH --> REPORTS["SQL Analytics"]
 ```
 
-### OLTP, DWH và ETL
+**Vòng đời giao dịch**
 
-- **OLTP:** SQL Server lưu tài khoản, danh mục, sản phẩm, giao dịch và đánh giá.
-- **Data Warehouse:** Star Schema gồm <code>dim_user</code>, <code>dim_product</code>, <code>dim_date</code> và <code>fact_transactions</code>; metadata ETL lưu watermark, lịch sử chạy và dòng dữ liệu bị từ chối.
-- **SCD Type 2:** <code>dim_product</code> lưu phiên bản thuộc tính sản phẩm theo khoảng hiệu lực. Fact tham chiếu phiên bản có hiệu lực tại thời điểm giao dịch.
-- **ETL:** extract theo <code>updated_at</code> và watermark; transform/chuẩn hóa; load dimension trước fact trong transaction; sau đó đối soát dữ liệu.
-
-- **OLTP:** SQL Server stores users, categories, products, transactions, and reviews.
-- **Data Warehouse:** A Star Schema with <code>dim_user</code>, <code>dim_product</code>, <code>dim_date</code>, and <code>fact_transactions</code>, plus ETL metadata for watermarks, run history, and rejected rows.
-- **SCD Type 2:** <code>dim_product</code> preserves versioned listing attributes with effective-date ranges. Facts reference the version valid at transaction time.
-- **ETL:** Extracts changes using <code>updated_at</code> and watermarks, transforms records, loads dimensions before facts in a transaction, then reconciles source and warehouse data.
-
-ETL dùng cửa sổ overlap mặc định 5 phút để hạn chế bỏ sót commit trễ. Load được thiết kế idempotent để dữ liệu trong vùng overlap có thể được đọc lại an toàn. Lịch sử SCD Type 2 chỉ được ghi nhận từ khi tính năng được bật; pipeline không thể tái tạo những thay đổi cũ mà OLTP không lưu lịch sử.
-
-The default ETL overlap window is 5 minutes to reduce the risk of missing late commits. Loads are idempotent, so records in the overlap window can be processed again safely. SCD Type 2 history is captured from feature activation onward; the pipeline cannot reconstruct older changes that were never retained by the OLTP source.
-
-### Báo cáo phân tích | Analytics Reports
-
-| Truy vấn / Query | Mục đích / Purpose |
-|---|---|
-| <code>top3_majors_it</code> | Top ngành học mua thiết bị IT / Top majors purchasing IT equipment |
-| <code>books_peak_month</code> | Tháng cao điểm giao dịch giáo trình / Peak month for textbook transactions |
-| <code>days_to_sell_by_category</code> | Thời gian bán và mức giảm giá theo danh mục / Time-to-sell and discount by category |
-| <code>seller_pareto</code> | Phân tích tỷ trọng đóng góp của người bán / Seller contribution analysis |
-| <code>listing_sell_through_by_category</code> | Tồn tin, giao dịch hoàn tất và sell-through theo danh mục / Listings, completed sales, and sell-through by category |
-
-## Công nghệ | Technology Stack
-
-| Thành phần / Component | Công nghệ / Technologies |
-|---|---|
-| Frontend | React 19, TypeScript, Vite 6 |
-| Backend | Python 3.12+, FastAPI, Pydantic, Uvicorn |
-| ORM & Database | SQLAlchemy, Microsoft SQL Server, pyodbc, ODBC Driver 18 |
-| Authentication | JWT, bcrypt, HttpOnly cookies |
-| Data Engineering | Pandas, NumPy, incremental ETL |
-| Testing & Quality | Pytest, Ruff, TypeScript build |
-| Deployment | Docker, Docker Compose, Nginx, GitHub Actions |
-
-## Cấu trúc dự án | Project Structure
-
-```text
-cho-troi-uit/
-├── backend/
-│   ├── main.py
-│   ├── database.py
-│   ├── models.py
-│   ├── schemas.py
-│   ├── security.py
-│   └── tests/
-├── frontend/
-│   └── src/
-│       ├── pages/
-│       ├── components/
-│       ├── hooks/
-│       └── utils/
-├── data_pipeline/
-│   ├── run_etl.py
-│   ├── scheduler.py
-│   ├── run_analytics.py
-│   ├── etl/
-│   ├── analytics/
-│   └── tests/
-├── database_scripts/
-│   ├── 01_init_schema.sql
-│   ├── 02_seed_reference_data.sql
-│   └── migrations/
-├── docs/
-├── scripts/
-├── docker-compose.yml
-├── .env.example
-├── .env.compose.example
-└── README.md
+```mermaid
+flowchart TD
+    A["Available"] -->|"Buyer gửi yêu cầu"| B["Reserved / Pending"]
+    B -->|"Seller chấp nhận"| D["Accepted"]
+    B -->|"Từ chối / Huỷ"| X["Cancelled"]
+    D -->|"Một bên huỷ"| X
+    D -->|"Hai bên xác nhận"| E["Completed"]
+    X -->|"Mở bán lại"| A
+    E --> F["Sold"]
+    E --> G["Đánh giá hai chiều"]
 ```
 
-## Cài đặt local | Local Setup
+Thanh toán và bàn giao hàng do hai bên tự thoả thuận bên ngoài nền tảng.
 
-### Yêu cầu | Prerequisites
+## Báo cáo phân tích
 
-- Python 3.12+
-- Node.js 20+
-- SQL Server 2016+ hoặc SQL Server Express
-- Microsoft ODBC Driver 18 for SQL Server
-- Git
+Chạy bằng `python data_pipeline/run_analytics.py --list`:
 
-### 1. Clone repository
+| Truy vấn | Câu hỏi trả lời |
+|---|---|
+| `top3_majors_it` | Top 3 ngành mua thiết bị IT nhiều nhất |
+| `books_peak_month` | Tháng cao điểm giao dịch giáo trình |
+| `days_to_sell_by_category` | Thời gian bán và mức giảm giá theo danh mục |
+| `seller_pareto` | Mức độ tập trung doanh thu theo người bán (Pareto) |
+| `listing_sell_through_by_category` | Tỷ lệ bán thành công theo danh mục |
+
+## Công nghệ
+
+| Lớp | Công nghệ |
+|---|---|
+| Frontend | React 19, TypeScript, Vite 6 |
+| Backend | Python 3.12, FastAPI, Pydantic, SQLAlchemy, Uvicorn |
+| Cơ sở dữ liệu | Microsoft SQL Server, pyodbc (ODBC Driver 18) |
+| Data Engineering | Python, Pandas, NumPy, ETL tăng dần, SCD Type 2 |
+| Bảo mật | JWT, bcrypt, HttpOnly cookie |
+| Chất lượng & DevOps | Pytest, Ruff, GitHub Actions, Docker, Docker Compose, Nginx |
+
+## Chạy nhanh với Docker
+
+Yêu cầu: Docker Desktop.
 
 ```powershell
 git clone https://github.com/Nghiepcoder17v/cho-troi-uit.git
 cd cho-troi-uit
-```
-
-### 2. Tạo môi trường Python và cài dependencies
-
-```powershell
-python -m venv .venv
-./.venv/Scripts/Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r backend/requirements-dev.txt -r data_pipeline/requirements-dev.txt
-```
-
-### 3. Chuẩn bị SQL Server
-
-Tạo hai database riêng cho nghiệp vụ và phân tích:
-
-```sql
-CREATE DATABASE ChoTroUIT;
-CREATE DATABASE ChoTroUIT_DWH;
-```
-
-Trên database OLTP mới tạo, chạy schema và dữ liệu danh mục:
-
-```powershell
-sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts/01_init_schema.sql
-sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts/02_seed_reference_data.sql
-```
-
-> **Lưu ý quan trọng:** <code>01_init_schema.sql</code> có thao tác drop và tạo lại bảng. Chỉ chạy trên database phát triển mới hoặc database được chủ động reset. Không chạy script này trên database hiện hữu có dữ liệu cần giữ. Với database cũ, hãy backup, kiểm tra trạng thái schema và áp dụng đúng migration trong <code>database_scripts/migrations/</code>. Docker initializer cũng không tự chạy migration cho database đã tồn tại.
-
-### 4. Cấu hình môi trường
-
-Sao chép <code>.env.example</code> thành <code>.env</code> tại thư mục gốc:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Điền thông tin kết nối SQL Server, DWH và JWT. Ví dụ Windows Authentication:
-
-```dotenv
-DATABASE_URL=mssql+pyodbc://@localhost/ChoTroUIT?driver=ODBC+Driver+18+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes
-DWH_DATABASE_URL=mssql+pyodbc://@localhost/ChoTroUIT_DWH?driver=ODBC+Driver+18+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes
-JWT_SECRET=replace_with_a_long_random_secret
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
-CORS_ORIGINS=http://localhost:5173
-```
-
-Tạo JWT secret ngẫu nhiên:
-
-```powershell
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
-
-Không commit <code>.env</code>, mật khẩu, JWT secret hoặc connection string thật lên Git.
-
-Do not commit <code>.env</code>, passwords, JWT secrets, or real connection strings to Git.
-
-### 5. Khởi chạy backend
-
-```powershell
-Set-Location backend
-../.venv/Scripts/Activate.ps1
-uvicorn main:app --reload
-```
-
-Backend mặc định cung cấp:
-
-- API health check: <code>http://localhost:8000/</code>
-- Swagger UI: <code>http://localhost:8000/docs</code>
-- OpenAPI JSON: <code>http://localhost:8000/openapi.json</code>
-
-### 6. Khởi chạy frontend
-
-Mở terminal khác:
-
-```powershell
-Set-Location frontend
-npm ci
-npm run dev
-```
-
-Frontend mặc định chạy tại <code>http://localhost:5173</code>. Đảm bảo backend đã cho phép origin này trong <code>CORS_ORIGINS</code>.
-
-### 7. Build frontend production
-
-```powershell
-npm run build
-npm run preview
-```
-
-## Docker Compose
-
-Docker Compose dựng frontend production qua Nginx, FastAPI, SQL Server và các tiện ích ETL/analytics.
-
-Docker Compose starts the production frontend behind Nginx, the FastAPI service, SQL Server, and optional ETL/analytics utilities.
-
-```powershell
-Copy-Item .env.compose.example .env.compose
-```
-
-Chỉnh <code>MSSQL_SA_PASSWORD</code> và <code>JWT_SECRET</code> trong <code>.env.compose</code>, sau đó chạy từ thư mục gốc:
-
-```powershell
+Copy-Item .env.compose.example .env.compose   # đặt MSSQL_SA_PASSWORD và JWT_SECRET
 docker compose --env-file .env.compose up --build
 ```
 
-Mở <code>http://localhost:8080</code>. Dừng container nhưng giữ dữ liệu database:
-
-```powershell
-docker compose --env-file .env.compose down
-```
-
-| Service | Vai trò / Purpose |
-|---|---|
-| <code>frontend</code> | Nginx phục vụ frontend production và proxy API |
-| <code>backend</code> | FastAPI application |
-| <code>sqlserver</code> | SQL Server chứa OLTP và DWH |
-| <code>etl</code>, <code>analytics</code> | Công cụ chạy một lần, bật qua profile <code>tools</code> |
-| <code>etl-scheduler</code> | Scheduler ETL định kỳ, bật qua profile <code>automation</code> |
-
-Database được lưu trong Docker named volume <code>sqlserver-data</code>. Xóa volume sẽ xóa dữ liệu OLTP và DWH. Scheduler ETL không tự bật trong cấu hình mặc định.
-
-The databases are persisted in the <code>sqlserver-data</code> named volume. Removing the volume deletes both OLTP and DWH data. The ETL scheduler is disabled by default.
-
-Chạy ETL hoặc analytics thủ công trong Docker:
+Mở **http://localhost:8080**. Chạy ETL và analytics thủ công:
 
 ```powershell
 docker compose --env-file .env.compose --profile tools run --rm etl
 docker compose --env-file .env.compose --profile tools run --rm analytics
 ```
 
-Bật scheduler ETL:
+Bật ETL định kỳ: `docker compose --env-file .env.compose --profile automation up -d etl-scheduler`
+
+> ⚠️ Cấu hình Docker dùng tài khoản `sa`, **chỉ dành cho local/dev**. Production cần application principal riêng (không thuộc `sysadmin`/`db_owner`). Xem [DB6 rollout checklist](docs/DB6_ROLLOUT_CHECKLIST.md).
+
+Chi tiết: [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.md).
+
+## Chạy local (không dùng Docker)
+
+**Yêu cầu:** Python 3.12+, Node.js 20+, SQL Server 2016+ (hoặc Express), ODBC Driver 18 for SQL Server.
 
 ```powershell
-docker compose --env-file .env.compose --profile automation up -d etl-scheduler
-docker compose --env-file .env.compose logs -f etl-scheduler
+# 1. Môi trường Python
+python -m venv .venv
+./.venv/Scripts/Activate.ps1
+python -m pip install -r backend/requirements-dev.txt -r data_pipeline/requirements-dev.txt
+
+# 2. Cấu hình (điền DATABASE_URL, DWH_DATABASE_URL, JWT_SECRET)
+Copy-Item .env.example .env
+python -c "import secrets; print(secrets.token_urlsafe(32))"   # tạo JWT_SECRET
 ```
 
-Hướng dẫn chi tiết: [Docker Compose](docs/DOCKER_COMPOSE.md) · [ETL Automation](docs/ETL_AUTOMATION.md).
-
-> **Lưu ý bảo mật:** Docker Compose hiện dùng SQL Server `sa` cho môi trường local/dev. Không tái sử dụng cấu hình này cho môi trường dùng chung hoặc production; production phải dùng application principal riêng, không thuộc `sysadmin`/`db_owner`, và principal triển khai schema riêng.
-
-## ETL và Analytics
-
-Chạy ETL từ thư mục gốc sau khi cấu hình <code>DATABASE_URL</code> và <code>DWH_DATABASE_URL</code>:
-
-Run ETL from the repository root after configuring <code>DATABASE_URL</code> and <code>DWH_DATABASE_URL</code>:
+```sql
+CREATE DATABASE ChoTroUIT;
+CREATE DATABASE ChoTroUIT_DWH;
+```
 
 ```powershell
+# 3. Khởi tạo schema (chỉ trên database MỚI)
+sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts/01_init_schema.sql
+sqlcmd -S localhost -d ChoTroUIT -E -i database_scripts/02_seed_reference_data.sql
+
+# 4. Backend  ->  http://localhost:8000/docs
+Set-Location backend; uvicorn main:app --reload
+
+# 5. Frontend (terminal khác)  ->  http://localhost:5173
+Set-Location frontend; npm ci; npm run dev
+
+# 6. ETL (từ thư mục gốc)
 python data_pipeline/run_etl.py
 ```
 
-Một số chế độ hỗ trợ:
+> ⚠️ `01_init_schema.sql` **drop và tạo lại bảng**. Với database đã có dữ liệu, hãy backup và áp dụng đúng file trong `database_scripts/migrations/`.
+
+<details>
+<summary><b>Tuỳ chọn ETL & exit code</b></summary>
 
 ```powershell
-python data_pipeline/run_etl.py --full-refresh
-python data_pipeline/run_etl.py --overlap-minutes 5
-python data_pipeline/run_analytics.py --list
+python data_pipeline/run_etl.py --full-refresh        # nạp lại toàn bộ
+python data_pipeline/run_etl.py --overlap-minutes 5   # chỉnh cửa sổ overlap
 python data_pipeline/run_analytics.py top3_majors_it books_peak_month
 ```
 
-| Exit code | Ý nghĩa / Meaning |
+| Exit code | Ý nghĩa |
 |---:|---|
-| <code>0</code> | Thành công / Success |
-| <code>1</code> | Hoàn tất nhưng có cảnh báo hoặc dòng bị từ chối / Completed with warnings or rejected rows |
-| <code>2</code> | Tham số hoặc cấu hình không hợp lệ / Invalid arguments or configuration |
-| <code>3</code> | ETL thất bại / ETL failed |
+| `0` | Thành công |
+| `1` | Hoàn tất nhưng có cảnh báo/dòng bị từ chối |
+| `2` | Tham số hoặc cấu hình không hợp lệ |
+| `3` | ETL thất bại |
 
-<code>--drop-dwh</code> xóa toàn bộ Data Warehouse; chỉ sử dụng khi chủ động dựng lại DWH từ đầu và đã có backup phù hợp. Không dùng tùy chọn này trong vận hành định kỳ.
+`--drop-dwh` xoá toàn bộ Data Warehouse, chỉ dùng khi chủ động dựng lại từ đầu.
+</details>
 
-<code>--drop-dwh</code> deletes the entire Data Warehouse. Use it only for an intentional rebuild with an appropriate backup. Never use it for routine ETL runs.
-
-## Kiểm thử và CI | Testing & CI
-
-Chạy backend tests / Run backend tests:
+## Kiểm thử & CI
 
 ```powershell
-Set-Location backend
-pytest -v
+cd backend;       pytest -v
+cd data_pipeline; pytest -v
+cd frontend;      npm ci; npm run build
 ```
 
-Chạy data pipeline tests / Run data pipeline tests:
+GitHub Actions chạy 3 job độc lập: **Backend** (Ruff + Pytest), **Data Pipeline** (Ruff + Pytest), **Frontend** (TypeScript + Vite build). SQL Server integration test là opt-in, chỉ chạy trên database có tên kết thúc bằng `_test` để tránh ghi nhầm dữ liệu thật. Xem [docs/CI.md](docs/CI.md) và [docs/SQLSERVER_INTEGRATION_TESTING.md](docs/SQLSERVER_INTEGRATION_TESTING.md).
 
-```powershell
-Set-Location ../data_pipeline
-pytest -v
+## Cấu trúc dự án
+
+```text
+cho-troi-uit/
+├── backend/            # FastAPI: API, models, security, tests
+├── frontend/           # React + TypeScript (pages, components, hooks)
+├── data_pipeline/      # ETL, scheduler, analytics SQL, tests
+├── database_scripts/   # Schema, seed, migrations, diagnostics
+├── docs/               # Thiết kế, ERD, runbook, API contract
+├── scripts/            # Docker init
+└── docker-compose.yml
 ```
 
-Kiểm tra frontend / Build the frontend:
+## API
 
-```powershell
-Set-Location ../frontend
-npm ci
-npm run build
-```
+~40 endpoint REST. Tài liệu tương tác: `http://localhost:8000/docs` khi backend đang chạy. Hợp đồng đầy đủ: [docs/api_contract.md](docs/api_contract.md).
 
-CI trên GitHub Actions chạy ba job độc lập cho Backend (Ruff + Pytest), Data Pipeline (Ruff + Pytest) và Frontend (TypeScript + Vite build). SQL Server integration tests là opt-in vì cần một SQL Server và database kiểm thử riêng có tên kết thúc bằng <code>_test</code>.
+| Nhóm | Ví dụ |
+|---|---|
+| Auth | `POST /api/auth/register`, `/login`, `/logout` |
+| Sản phẩm | `GET/POST /api/products`, `PATCH /api/products/{id}` |
+| Giao dịch | `POST /api/transactions`, `/{id}/accept`, `/{id}/confirm-completion`, `/{id}/reviews` |
+| Tài khoản | `GET/PATCH /api/users/me`, `/api/transactions/purchases`, `/sales` |
+| Admin | `/api/admin/users`, `/role-assignments`, `/role-events` |
 
-GitHub Actions runs three independent jobs: Backend (Ruff + Pytest), Data Pipeline (Ruff + Pytest), and Frontend (TypeScript + Vite build). SQL Server integration tests are opt-in because they require a dedicated SQL Server instance and a test database whose name ends with <code>_test</code>.
+## Tài liệu thiết kế
 
-Hướng dẫn SQL Server integration tests: [docs/SQLSERVER_INTEGRATION_TESTING.md](docs/SQLSERVER_INTEGRATION_TESTING.md).
+- [ERD OLTP](docs/erd.dbml) · [DWH Star Schema](docs/dwh_star_schema.dbml) · [DWH SCD Type 2](docs/DWH_SCD2.md)
+- [ETL Automation](docs/ETL_AUTOMATION.md): scheduler, retry, watermark, giám sát
+- [Thiết kế sự kiện giao dịch](docs/DB4_TRANSACTION_EVENT_DESIGN_2026-11-12.md) · [Báo cáo & kiểm duyệt](docs/DB6B_REPORTING_MODERATION_DESIGN_2026-11-13.md) · [Admin controls](docs/DB6D_ADMIN_CONTROLS_DESIGN_2026-11-13.md)
+- [Design Profile](docs/DESIGN_PROFILE.md): định hướng UI và design tokens
 
-## Bảo mật | Security
+## Giới hạn hiện tại
 
-- Mật khẩu được băm bằng bcrypt; JWT phiên đăng nhập được lưu trong cookie <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite=Lax</code>.
-- Request thay đổi dữ liệu sử dụng cookie phiên phải gửi <code>Origin</code> thuộc danh sách <code>CORS_ORIGINS</code>.
-- API lấy buyer/seller identity từ phiên đăng nhập, không tin ID do client gửi lên để xác định quyền sở hữu.
-- Email đăng ký phải thuộc miền <code>@gm.uit.edu.vn</code>; MSSV gồm đúng 8 chữ số và khớp phần trước <code>@</code> của email.
-- Trang cá nhân công khai không trả email, MSSV hoặc password hash.
-- SQL Server sử dụng foreign key, CHECK constraint, unique constraint và filtered unique index để bảo vệ tính toàn vẹn.
-- Quyền MODERATOR/ADMIN được đọc từ assignment còn hiệu lực trong database ở từng request; tài khoản ADMIN đầu tiên vẫn phải được bootstrap qua operator/DBA được phê duyệt.
-- ETL ghi nhận dòng bị từ chối và trạng thái mỗi lần chạy; không âm thầm nạp dữ liệu lỗi.
+- Chưa có khoá/xoá tài khoản, kháng nghị (appeals), phân quyền hàng loạt.
+- Không tích hợp thanh toán, vận chuyển hay theo dõi giao hàng.
+- Lịch sử SCD Type 2 chỉ được ghi từ khi bật tính năng; ETL không thể dựng lại thay đổi cũ mà OLTP chưa lưu.
 
-- Passwords are hashed with bcrypt; session JWTs are stored in <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite=Lax</code> cookies.
-- Cookie-authenticated state-changing requests must provide an <code>Origin</code> listed in <code>CORS_ORIGINS</code>.
-- Buyer/seller identity is derived from the authenticated session, not trusted from client-supplied ownership IDs.
-- Registration requires an <code>@gm.uit.edu.vn</code> email; the student ID must contain exactly 8 digits and match the email prefix.
-- Public profiles do not expose email addresses, student IDs, or password hashes.
-- SQL Server constraints and indexes enforce data integrity; ETL records rejected rows rather than silently loading invalid data.
+## Đóng góp
 
-## API chính | Main API
+Làm việc trên nhánh `feat/*`, `fix/*`, `test/*` hoặc `docs/*`, mở Pull Request vào `main` và chờ CI xanh trước khi merge.
 
-| Method | Endpoint | Mô tả / Description |
-|---|---|---|
-| <code>GET</code> | <code>/</code> | Health check |
-| <code>POST</code> | <code>/api/auth/register</code> | Đăng ký / Register |
-| <code>POST</code> | <code>/api/auth/login</code> | Đăng nhập và tạo cookie phiên / Sign in and set session cookie |
-| <code>POST</code> | <code>/api/auth/logout</code> | Đăng xuất / Sign out |
-| <code>GET</code>, <code>PATCH</code> | <code>/api/users/me</code> | Xem và cập nhật hồ sơ / Get and update profile |
-| <code>GET</code> | <code>/api/products</code> | Tìm kiếm và phân trang / Search and paginate listings |
-| <code>POST</code> | <code>/api/products</code> | Đăng sản phẩm / Create listing |
-| <code>PATCH</code> | <code>/api/products/{product_id}</code> | Cập nhật tin của chủ sở hữu / Update owned listing |
-| <code>POST</code> | <code>/api/transactions</code> | Gửi yêu cầu mua / Submit purchase request |
-| <code>POST</code> | <code>/api/transactions/{id}/accept</code> | Người bán chấp nhận / Seller accepts request |
-| <code>POST</code> | <code>/api/transactions/{id}/confirm-completion</code> | Xác nhận hoàn tất / Confirm completion |
-| <code>POST</code> | <code>/api/transactions/{id}/reviews</code> | Đánh giá sau giao dịch / Submit post-transaction review |
-| <code>GET</code> | <code>/api/transactions/purchases</code> | Đơn mua / Purchases |
-| <code>GET</code> | <code>/api/transactions/sales</code> | Đơn bán / Sales |
-| <code>GET</code> | <code>/api/users/me/permissions</code> | Vai trò hiện hành của tài khoản / Current role assignments |
-| <code>GET</code> | <code>/api/admin/users?q=...</code> | Tìm tài khoản trong khu vực ADMIN / Search accounts for role management |
-| <code>GET</code> | <code>/api/admin/role-assignments</code> | Lịch sử phân quyền / Role assignment history |
-| <code>GET</code> | <code>/api/admin/role-events</code> | Audit cấp/thu hồi quyền / Role grant and revoke audit |
-| <code>POST</code> | <code>/api/admin/users/{user_id}/roles</code> | Cấp MODERATOR hoặc ADMIN / Grant MODERATOR or ADMIN |
-| <code>POST</code> | <code>/api/admin/role-assignments/{assignment_id}/revoke</code> | Thu hồi vai trò / Revoke a role assignment |
+## Tác giả
 
-API contract đầy đủ: [docs/api_contract.md](docs/api_contract.md). Tài liệu API tương tác có tại <code>/docs</code> khi backend đang chạy.
-
-Full API contract: [docs/api_contract.md](docs/api_contract.md). Interactive API documentation is available at <code>/docs</code> while the backend is running.
-
-## Tài liệu liên quan | Documentation
-
-- [API Contract](docs/api_contract.md) — request/response definitions and business rules.
-- [SQL Server Integration Testing](docs/SQLSERVER_INTEGRATION_TESTING.md) — test setup, safeguards, and verification record.
-- [DB-1 Media Storage Design](docs/DB1_MEDIA_STORAGE_DESIGN_2026-11-12.md) — storage adapters, private media access, provider decision, and profile/media schema design.
-- [DB-6C Moderator Bootstrap](docs/DB6C_MODERATOR_BOOTSTRAP_RUNBOOK.md) — operator-controlled initial ADMIN bootstrap.
-- [DB-6D Admin Controls](docs/DB6D_ADMIN_CONTROLS_RUNBOOK.md) — role management and production SQL principal prerequisites.
-- [DB-6 rollout readiness](docs/DB6_ROLLOUT_CHECKLIST.md) — backup/restore gates, runtime principal diagnostic, ordered migrations, verification, and recovery boundaries.
-- [Docker Compose](docs/DOCKER_COMPOSE.md) — local container deployment and database initialization.
-- [ETL Automation](docs/ETL_AUTOMATION.md) — scheduler, retry, watermark, and run monitoring.
-- [DWH SCD Type 2](docs/DWH_SCD2.md) — product history model and migration.
-- [CI](docs/CI.md) — automated quality checks.
-- [Design Profile](docs/DESIGN_PROFILE.md) — UI direction, design tokens, and responsive principles.
-- [OLTP ERD](docs/erd.dbml) · [DWH Star Schema](docs/dwh_star_schema.dbml).
-
-## Trạng thái dự án | Project Status
-
-Các mốc kỹ thuật Step 1–15 và phần mở rộng DWH/analytics, DB-6A Favorites, DB-6B Reports, DB-6C Moderation và DB-6D Admin Controls đã được triển khai trên nhánh <code>main</code>. CI xác minh backend, data pipeline, frontend và các workflow SQL Server chạy trên database kiểm thử riêng; việc triển khai lên application database vẫn cần quy trình backup/restore và phê duyệt vận hành.
-
-Core milestones (Steps 1–15), DWH/analytics, DB-6A Favorites, DB-6B Reports, DB-6C Moderation and DB-6D Admin Controls are implemented on <code>main</code>. CI verifies the backend, data pipeline, frontend and SQL Server workflows on isolated test databases; deployment to the application database still requires backup/restore verification and operational approval.
-
-**Ngoài phạm vi hiện tại / Current exclusions**
-
-- Chưa có khóa tài khoản, xóa tài khoản, quy trình kháng nghị (appeals), hoặc thao tác phân quyền hàng loạt.
-- Không tích hợp thanh toán, vận chuyển hoặc theo dõi giao hàng.
-- Thanh toán và bàn giao được hai bên tự thỏa thuận bên ngoài nền tảng.
-
-- Account suspension, account deletion, appeals, and bulk role operations are out of scope.
-- Payment, shipping, and delivery tracking are not integrated.
-- Buyers and sellers arrange payment and handover independently outside the platform.
-
-## Đóng góp | Contributing
-
-Các thay đổi nên được thực hiện trên nhánh riêng theo quy ước <code>feat/*</code>, <code>fix/*</code>, <code>test/*</code> hoặc <code>docs/*</code>, sau đó mở Pull Request vào <code>main</code>. Chờ CI hoàn tất và review trước khi merge; không commit trực tiếp vào <code>main</code>.
-
-Use a dedicated <code>feat/*</code>, <code>fix/*</code>, <code>test/*</code>, or <code>docs/*</code> branch and open a Pull Request against <code>main</code>. Wait for CI and review before merging; do not commit directly to <code>main</code>.
-
-## Tác giả | Author
-
-**Hà Văn Nghiệp** — [@Nghiepcoder17v](https://github.com/Nghiepcoder17v)
-
----
-
-**Chợ Trời UIT** · Student Marketplace & Data Engineering Project
+**Hà Văn Nghiệp**, sinh viên UIT · [@Nghiepcoder17v](https://github.com/Nghiepcoder17v)
